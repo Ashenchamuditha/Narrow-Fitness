@@ -10,6 +10,7 @@ import pkg from "pg";
 const { Pool } = pkg;
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+
 // --- DATABASE CONNECTION (Defined here to stop the import error) ---
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -20,10 +21,11 @@ const pool = new Pool({
 export const query = (text: string, params?: any[]) => pool.query(text, params);
 
 // Router Imports
-import adminRouter from "./src/lib/adminRoutes.js";
-import memberRouter from "./src/lib/memberRoutes.js";
-import aiRouter from "./src/lib/aiAssistantRoutes.js";
-//verify nodemailer configuration
+// Change from './src/lib/...' to '../src/lib/...'
+
+import adminRouter from "../src/lib/adminRoutes.js";
+import memberRouter from "../src/lib/memberRoutes.js";
+import aiRouter from "../src/lib/aiAssistantRoutes.js";
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
