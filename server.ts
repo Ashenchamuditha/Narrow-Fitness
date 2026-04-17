@@ -10,12 +10,19 @@ import pkg from "pg";
 const { Pool } = pkg;
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
-import { query } from './src/lib/db.js';
+// --- DATABASE CONNECTION (Defined here to stop the import error) ---
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false }
+});
+
+// This creates the 'query' function that your routes need
+export const query = (text: string, params?: any[]) => pool.query(text, params);
 
 // Router Imports
-import adminRouter from "./src/lib/adminRoutes";
-import memberRouter from "./src/lib/memberRoutes";
-import aiRouter from "./src/lib/aiAssistantRoutes";
+import adminRouter from "./src/lib/adminRoutes.js";
+import memberRouter from "./src/lib/memberRoutes.js";
+import aiRouter from "./src/lib/aiAssistantRoutes.js";
 //verify nodemailer configuration
 const transporter = nodemailer.createTransport({
   service: 'gmail',
@@ -60,15 +67,6 @@ const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || "narrow_fitness_secret_key_123";
 const DATABASE_URL = process.env.DATABASE_URL;
 
-// --- 2. DATABASE SETUP ---
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false }
-});
-
-// 2. Setup the query helper
-// If "query" is red, make sure you don't have "import { query }" at the top!
-export const query = (text: string, params?: any[]) => pool.query(text, params);
 // --- 3. APP & HTTP SERVER SETUP ---
 const app = express();
 const server = http.createServer(app);
