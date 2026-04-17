@@ -10,6 +10,7 @@ import pkg from "pg";
 const { Pool } = pkg;
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import { query } from './src/lib/db.js';
 
 // Router Imports
 import adminRouter from "./src/lib/adminRoutes";
@@ -62,11 +63,12 @@ const DATABASE_URL = process.env.DATABASE_URL;
 // --- 2. DATABASE SETUP ---
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  // Add this logic to handle Vercel's secure connection
   ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false }
 });
-const query = (text: string, params?: any[]) => pool.query(text, params);
 
+// 2. Setup the query helper
+// If "query" is red, make sure you don't have "import { query }" at the top!
+export const query = (text: string, params?: any[]) => pool.query(text, params);
 // --- 3. APP & HTTP SERVER SETUP ---
 const app = express();
 const server = http.createServer(app);

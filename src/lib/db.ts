@@ -15,7 +15,9 @@ const pool = new Pool({
   // Add this logic to handle Vercel's secure connection
   ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false }
 });
-
+export const query = (text: string, params?: any[]): Promise<any> => {
+  return pool.query(text, params);
+};
 // Test the connection
 pool.query('SELECT NOW()', (err, res) => {
   if (err) {
@@ -26,8 +28,5 @@ pool.query('SELECT NOW()', (err, res) => {
   }
 });
 
-export const query = (text: string, params?: any[]) => {
-  return pool.query(text, params);
-};
 
 export default pool;
