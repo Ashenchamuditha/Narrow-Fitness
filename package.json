@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "server": "npx tsx server.ts",
+    "server": "tsx server.ts",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },
