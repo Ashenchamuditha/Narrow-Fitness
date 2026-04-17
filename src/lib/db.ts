@@ -12,8 +12,10 @@ if (!DATABASE_URL) {
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  // Add this logic to handle Vercel's secure connection
-  ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false }
+  // This handles the secure connection to Neon
+  ssl: {
+    rejectUnauthorized: false
+  }
 });
 export const query = (text: string, params?: any[]) => pool.query(text, params);
 
