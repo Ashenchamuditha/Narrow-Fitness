@@ -61,11 +61,11 @@ const DATABASE_URL = process.env.DATABASE_URL;
 
 // --- 2. DATABASE SETUP ---
 const pool = new Pool({
-  connectionString: DATABASE_URL,
-  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+  connectionString: process.env.DATABASE_URL,
+  // Add this logic to handle Vercel's secure connection
+  ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false }
 });
-
-export const query = (text: string, params?: any[]) => pool.query(text, params);
+const query = (text: string, params?: any[]) => pool.query(text, params);
 
 // --- 3. APP & HTTP SERVER SETUP ---
 const app = express();
@@ -322,3 +322,5 @@ app.get("/api/public/gallery", async (req, res) => {
     res.status(500).json([]);
   }
 });
+
+export default app;

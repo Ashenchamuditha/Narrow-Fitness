@@ -19,6 +19,16 @@
             "database": "Narrowfitness",
             "username": "postgres",
             "name": "postgrescon"
+        },
+        {
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5432,
+            "driver": "PostgreSQL",
+            "name": "Narrowfitness db",
+            "database": "Narrowfitness",
+            "username": "postgres"
         }
     ]
 }

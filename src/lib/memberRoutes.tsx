@@ -3,9 +3,7 @@ import bcrypt from 'bcryptjs';
 import { query } from './db';
 import nodemailer from 'nodemailer';
 import jwt from 'jsonwebtoken';
-import { useState } from "react";
-// Ensure this line exists at the top of your component
-const [isModalOpen, setIsModalOpen] = useState(false);
+
 const memberRouter = Router();
 
 // Use environment variable for Secret, or a fallback for development
@@ -250,13 +248,7 @@ memberRouter.post("/auth/reset-password", async (req, res) => {
   }
 });
 
-  
-// --- WORKOUT PLAN ROUTES ---
-const [editingId, setEditingId] = useState<number | null>(null);
-const [title, setTitle] = useState('');
-const [uploadType, setUploadType] = useState<'file' | 'text'>('file');
-const [pastedText, setPastedText] = useState('');
-const [selectedFile, setSelectedFile] = useState<{name: string, data: any} | null>(null);
+  //workout 
 // 1. Fetch List of Workouts (Already exists, but good to have)
 memberRouter.get("/workouts/:userId", async (req, res) => {
   const { userId } = req.params;
@@ -308,27 +300,7 @@ memberRouter.get("/workouts/detail/:id", async (req, res) => {
       // We cast as 'any' to stop TypeScript from showing red lines on .source_type etc.
       const data = (await res.json()) as any; 
 
-      // 2. Set Basic Info
-      setEditingId(data.id);           // SQL: id
-      setTitle(data.title);             // SQL: title
-      setUploadType(data.source_type);  // SQL: source_type
-
-      // 3. Set Content based on Type
-      if (data.source_type === 'text') {
-        setPastedText(data.content);    // SQL: content
-        setSelectedFile(null);
-      } else {
-        // If it's a file, we restore the name and the base64 data
-        setSelectedFile({ 
-          name: data.file_name,         // SQL: file_name
-          data: data.content            // SQL: content (Base64 string)
-        });
-        setPastedText('');
-      }
-      
-      // 4. Open the form
-      setIsModalOpen(true);
-      console.log("✅ Edit Form Pre-filled with DB Data:", data.title);
+     
 
     } catch (err) {
       console.error("Edit Error:", err);
@@ -403,6 +375,8 @@ memberRouter.delete("/workouts/:id", async (req, res) => {
     res.status(500).json({ message: "Could not delete plan." });
   }
 });
+//greetings email for new users 
+
 
 
 // --- CLASS & BOOKING ROUTES ---
@@ -508,53 +482,90 @@ memberRouter.put("/update-security", async (req, res) => {
     res.status(500).json({ message: "Database error during security update." });
   }
 });
+const sendGreetingEmail = async (email: string, name: string, data: any) => {
+  const mailOptions = {
+    from: `"Narrow Fitness Elite" <${process.env.EMAIL_USER}>`,
+    to: email,
+    subject: "YOUR PROFILE IS LIVE | Narrow Fitness Elite",
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; background-color: #000; color: #fff; padding: 40px; border-radius: 20px; border: 1px solid #333;">
+        <h1 style="color: #f97316; text-transform: uppercase; font-style: italic;">Welcome to the Elite, ${name}</h1>
+        <p style="color: #aaa; font-size: 14px;">Your registration and onboarding are officially complete. Your physical data has been synchronized with our AI coaching systems.</p>
+        
+        <div style="background-color: #111; padding: 20px; border-radius: 15px; border-left: 4px solid #f97316; margin: 25px 0;">
+          <h3 style="color: #f97316; margin-top: 0; font-size: 12px; text-transform: uppercase;">Blueprint Summary</h3>
+          <p style="margin: 5px 0; font-size: 14px;"><strong>Target Goal:</strong> ${data.goal}</p>
+          <p style="margin: 5px 0; font-size: 14px;"><strong>Starting Weight:</strong> ${data.weight} kg</p>
+          <p style="margin: 5px 0; font-size: 14px;"><strong>Height:</strong> ${data.height} cm</p>
+        </div>
 
-// 11. Save Physical Record (Sync with Password check)
+        <p style="font-size: 13px; color: #666; font-style: italic; text-align: center;">"Results are earned, not given. Your journey starts now."</p>
+        
+        <div style="text-align: center; margin-top: 30px;">
+          <a href="http://localhost:5173/member" style="background-color: #f97316; color: #fff; padding: 15px 30px; text-decoration: none; border-radius: 10px; font-weight: bold; font-size: 12px; text-transform: uppercase;">Access Member Hub</a>
+        </div>
+      </div>
+    `
+  };
+  return transporter.sendMail(mailOptions);
+};
+
+// --- 11. Save Physical Record (Sync with Password check) ---
 memberRouter.post("/profile-secure", async (req, res) => {
   const { userId, currentPassword, gender, dob, phone, address, current_weight, height, target_weight, medical_conditions, medical_details, has_injuries, injury_details, has_allergies, allergy_details, primary_goal, activity_level, emergency_contact_name, emergency_contact_phone } = req.body;
   
   try {
-    const userRes = await query("SELECT password FROM users WHERE id = $1", [userId]);
-    const isMatch = await bcrypt.compare(currentPassword, userRes.rows[0].password);
-    if (!isMatch) return res.status(401).json({ message: "Verification failed: Incorrect password." });
+    const userRes = await query("SELECT email, name, password FROM users WHERE id = $1", [userId]);
+    const user = userRes.rows[0];
+    
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) return res.status(401).json({ message: "Verification failed." });
 
     const profileExists = await query("SELECT userid FROM memberprofiles WHERE userid = $1", [userId]);
     if (profileExists.rows.length > 0) {
         await query(`UPDATE memberprofiles SET gender=$2, dob=$3, phone=$4, address=$5, current_weight=$6, height=$7, target_weight=$8, medical_conditions=$9, medical_details=$10, has_injuries=$11, injury_details=$12, has_allergies=$13, allergy_details=$14, primary_goal=$15, activity_level=$16, emergency_contact_name=$17, emergency_contact_phone=$18, updated_at=now() WHERE userid = $1`, 
           [userId, gender, dob, phone, address, current_weight, height, target_weight, medical_conditions, medical_details, has_injuries, injury_details, has_allergies, allergy_details, primary_goal, activity_level, emergency_contact_name, emergency_contact_phone]);
-      } else {
+    } else {
         await query(`INSERT INTO memberprofiles (userid, gender, dob, phone, address, current_weight, height, target_weight, medical_conditions, medical_details, has_injuries, injury_details, has_allergies, allergy_details, primary_goal, activity_level, emergency_contact_name, emergency_contact_phone) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`, 
           [userId, gender, dob, phone, address, current_weight, height, target_weight, medical_conditions, medical_details, has_injuries, injury_details, has_allergies, allergy_details, primary_goal, activity_level, emergency_contact_name, emergency_contact_phone]);
-      }
+    }
+
+    // Trigger Email
+    sendGreetingEmail(user.email, user.name, { goal: primary_goal, weight: current_weight, height: height }).catch(e => console.error(e));
     
-    res.status(200).json({ success: true, message: "Profile saved." });
+    res.status(200).json({ success: true, message: "Profile saved and synced." });
   } catch (err) {
     res.status(500).json({ message: "Database Error" });
   }
 });
 
-// 12. Standard Profile Save (Legacy support for Onboarding)
+// --- 12. Standard Profile Save (Legacy support for Onboarding) ---
 memberRouter.post("/profile", async (req, res) => {
     const { userId, gender, dob, phone, address, weight, height, targetWeight, medicalConditions, medicalDetails, hasInjuries, injuryDetails, hasAllergies, allergyDetails, primaryGoal, activityLevel, emergencyName, emergencyPhone, profileImage } = req.body;
-    const cleanWeight = weight === "" ? null : parseFloat(weight);
-    const cleanHeight = height === "" ? null : parseFloat(height);
-    const cleanTargetWeight = targetWeight === "" ? null : parseFloat(targetWeight);
-  
+    
     try {
+      const userRes = await query("SELECT email, name FROM users WHERE id = $1", [userId]);
+      const user = userRes.rows[0];
+
       const profileExists = await query("SELECT userid FROM memberprofiles WHERE userid = $1", [userId]);
       if (profileExists.rows.length > 0) {
         await query(`UPDATE memberprofiles SET gender=$2, dob=$3, phone=$4, address=$5, current_weight=$6, height=$7, target_weight=$8, medical_conditions=$9, medical_details=$10, has_injuries=$11, injury_details=$12, has_allergies=$13, allergy_details=$14, primary_goal=$15, activity_level=$16, emergency_contact_name=$17, emergency_contact_phone=$18, updated_at=now() WHERE userid = $1`, 
-          [userId, gender, dob, phone, address, cleanWeight, cleanHeight, cleanTargetWeight, medicalConditions, medicalDetails, hasInjuries, injuryDetails, hasAllergies, allergyDetails, primaryGoal, activityLevel, emergencyName, emergencyPhone]);
+          [userId, gender, dob, phone, address, weight, height, targetWeight, medicalConditions, medicalDetails, hasInjuries, injuryDetails, hasAllergies, allergyDetails, primaryGoal, activityLevel, emergencyName, emergencyPhone]);
       } else {
         await query(`INSERT INTO memberprofiles (userid, gender, dob, phone, address, current_weight, height, target_weight, medical_conditions, medical_details, has_injuries, injury_details, has_allergies, allergy_details, primary_goal, activity_level, emergency_contact_name, emergency_contact_phone) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`, 
-          [userId, gender, dob, phone, address, cleanWeight, cleanHeight, cleanTargetWeight, medicalConditions, medicalDetails, hasInjuries, injuryDetails, hasAllergies, allergyDetails, primaryGoal, activityLevel, emergencyName, emergencyPhone]);
+          [userId, gender, dob, phone, address, weight, height, targetWeight, medicalConditions, medicalDetails, hasInjuries, injuryDetails, hasAllergies, allergyDetails, primaryGoal, activityLevel, emergencyName, emergencyPhone]);
       }
+
       await query("UPDATE users SET is_profile_complete = TRUE, profile_image = $1 WHERE id = $2", [profileImage || null, userId]);
-      res.status(200).json({ message: "Physical record saved successfully" });
+
+      // Trigger Email
+      sendGreetingEmail(user.email, user.name, { goal: primaryGoal, weight: weight, height: height }).catch(e => console.error(e));
+
+      res.status(200).json({ message: "Welcome email sent and profile completed." });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
-  });
+});
 
 // --- 2. MEMBERSHIP ACTIVATION (FIXED & UNIFIED) ---
 memberRouter.post("/activate-plan", async (req, res) => {
