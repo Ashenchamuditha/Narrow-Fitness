@@ -63,7 +63,7 @@ export default function Hero() {
           </h1>
           
           <p className="text-lg md:text-xl text-gray-300 mb-10 max-w-xl font-medium leading-relaxed">
-            The ultimate destination for strength, discipline, and personal transformation. 
+            The ultimate destination for strength, discipline and personal transformation. 
             Join a professional community built on performance and elite results.
           </p>
 
@@ -85,9 +85,11 @@ export default function Hero() {
       </div>
 
       {/* Live Stats Overlay */}
-      <div className="absolute bottom-10 left-0 w-full z-10 hidden lg:block">
+    
+      <div className="relative lg:absolute lg:bottom-10 left-0 w-full z-10 py-10 lg:py-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-4 gap-8 border-t border-white/20 pt-10">
+          {/* Change grid-cols-4 to grid-cols-2 for mobile, and lg:grid-cols-4 for desktop */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 lg:gap-8 border-t border-white/20 pt-10">
             {[
               { label: 'Active Athletes', value: stats.members, icon: Users },
               { label: 'Pro Trainers', value: stats.trainers, icon: Star },
@@ -97,16 +99,21 @@ export default function Hero() {
               <motion.div
                 key={stat.label}
                 initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
+                whileInView={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.5 + i * 0.1 }}
-                className="flex items-center gap-4"
+                viewport={{ once: true }}
+                className="flex items-center gap-3 lg:gap-4"
               >
-                <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center border border-white/10">
-                   <stat.icon className="w-6 h-6 text-orange-500" />
+                <div className="w-10 h-10 lg:w-12 lg:h-12 bg-white/5 rounded-xl flex items-center justify-center border border-white/10">
+                   <stat.icon className="w-5 h-5 lg:w-6 lg:h-6 text-orange-500" />
                 </div>
                 <div>
-                  <div className="text-2xl font-black text-white leading-none">{stat.value}</div>
-                  <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-1">{stat.label}</div>
+                  <div className="text-xl lg:text-2xl font-black text-white leading-none">
+                    {stat.value || '0'}
+                  </div>
+                  <div className="text-[8px] lg:text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-1">
+                    {stat.label}
+                  </div>
                 </div>
               </motion.div>
             ))}
