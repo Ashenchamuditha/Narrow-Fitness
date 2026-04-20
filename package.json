@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "server": "tsx watch server.ts",
+    "server": "tsx watch api/index.ts",
     "build": "vite build",
-    "start": "tsx server.ts",
+    "start": "tsx api/index.ts",
     "preview": "vite preview"
   },
   "dependencies": {
