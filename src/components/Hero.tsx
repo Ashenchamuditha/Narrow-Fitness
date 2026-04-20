@@ -1,18 +1,35 @@
 import { motion } from 'framer-motion';
 import { ChevronRight, Dumbbell, Users, Trophy, Star, Zap } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom'; // Added useLocation
 import { useState, useEffect } from 'react';
 
 export default function Hero() {
   const [stats, setStats] = useState({ members: 0, trainers: 0 });
+  const location = useLocation(); // Hook to detect URL changes
 
+  // --- 1. SCROLL TO TOP LOGIC (Enhanced to work on every 'Home' click) ---
   useEffect(() => {
+    // This stops the browser from automatically jumping to the last scroll position
     if ('scrollRestoration' in window.history) {
       window.history.scrollRestoration = 'manual';
     }
-    window.scrollTo(0, 0);
-  }, []);
 
+    // Scroll to top immediately when the location changes to "/"
+    if (location.pathname === '/') {
+      window.scrollTo({
+        top: 0,
+        left: 0,
+        behavior: 'instant' // 'instant' gives a "refreshed" feel, 'smooth' is animated
+      });
+    }
+
+    // Optional: Clear the #hash from the URL so it doesn't stay there after refresh
+    if (window.location.hash) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, [location]); // Now triggers every time the user clicks a Nav link
+
+  // --- 2. FETCH LIVE STATS FROM DB ---
   useEffect(() => {
     fetch('/api/public/stats')
       .then(res => res.json())
@@ -88,7 +105,7 @@ export default function Hero() {
             </Link>
             
             <a href="#pricing" className="w-full sm:w-auto">
-              <button className="w-full flex items-center justify-center gap-3 bg-white/5 backdrop-blur-md text-white hover:bg-white/20 px-8 py-5 rounded-2xl font-black uppercase tracking-widest text-xs transition-all border border-white/10">
+              <button className="w-full flex items-center justify-center gap-3 bg-white/10 backdrop-blur-md text-white hover:bg-white/20 px-8 py-5 rounded-2xl font-black uppercase tracking-widest text-xs transition-all border border-white/10">
                 Explore Plans
               </button>
             </a>
@@ -99,7 +116,6 @@ export default function Hero() {
       {/* --- LIVE STATS OVERLAY --- */}
       <div className="relative md:absolute bottom-0 md:bottom-10 left-0 w-full z-20 pb-12 md:pb-0">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
-          {/* The line mentioned is created by the border-t below */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-y-10 gap-x-6 border-t border-white/10 pt-10">
             {[
               { label: 'Active Athletes', value: stats.members, icon: Users },
