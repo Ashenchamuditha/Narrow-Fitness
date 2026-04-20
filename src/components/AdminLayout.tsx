@@ -16,10 +16,10 @@ import {
   Clock,
   MessageSquare, 
   Image as ImageIcon,
-  Send, // Added for broadcast
-  Mail, // Added for broadcast
-  Loader2, // Added for loading state
-  Megaphone // Added for the button icon
+  Send, 
+  Mail, 
+  Loader2, 
+  Megaphone 
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -31,11 +31,10 @@ interface AdminLayoutProps {
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false); // New state
+  const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [currentDateTime, setCurrentDateTime] = useState(new Date()); 
   
-  // Broadcast Form State
   const [broadcastData, setBroadcastData] = useState({ subject: '', message: '' });
   const [isSending, setIsSending] = useState(false);
 
@@ -67,7 +66,6 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     navigate('/');
   };
 
-  // --- BROADCAST HANDLER ---
   const handleSendBroadcast = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!broadcastData.subject || !broadcastData.message) return;
@@ -127,7 +125,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         {showLogoutConfirm && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowLogoutConfirm(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="relative bg-white rounded-3xl p-8 w-full max-sm shadow-2xl border border-gray-100">
+            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="relative bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl border border-gray-100">
               <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center mb-6 mx-auto">
                 <LogOut className="w-8 h-8 text-red-500" />
               </div>
@@ -147,7 +145,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         {isBroadcastModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsBroadcastModalOpen(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative bg-white rounded-[2.5rem] p-8 w-full max-w-lg shadow-2xl border border-gray-100">
+            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="relative bg-white rounded-[2.5rem] p-8 w-full max-w-lg shadow-2xl border border-gray-100">
               <div className="flex justify-between items-center mb-8">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 bg-orange-100 rounded-2xl flex items-center justify-center">
@@ -227,7 +225,6 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           </div>
 
           <div className="flex items-center gap-4 lg:gap-8">
-            {/* --- NEW BROADCAST BUTTON --- */}
             <button 
               onClick={() => setIsBroadcastModalOpen(true)}
               className="flex items-center gap-2 px-4 py-2 bg-orange-50 text-orange-600 rounded-xl border border-orange-100 hover:bg-orange-600 hover:text-white transition-all shadow-sm group"
@@ -258,25 +255,47 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         </main>
       </div>
       
+      {/* MOBILE SIDEBAR (FIXED LOGOUT BUTTON) */}
       <AnimatePresence>
         {isMobileMenuOpen && (
            <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsMobileMenuOpen(false)} className="fixed inset-0 bg-black/50 z-30 lg:hidden" />
-            <motion.aside initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }} className="fixed inset-y-0 left-0 w-64 bg-black text-white z-40 lg:hidden flex flex-col shadow-2xl">
+            <motion.aside 
+              initial={{ x: '-100%' }} 
+              animate={{ x: 0 }} 
+              exit={{ x: '-100%' }} 
+              className="fixed inset-y-0 left-0 w-64 bg-black text-white z-40 lg:hidden flex flex-col shadow-2xl overflow-y-auto no-scrollbar"
+            >
               <div className="p-8 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Dumbbell className="w-6 h-6 text-orange-500" />
-                  <span className="text-xl font-black uppercase italic">Admin</span>
+                  <span className="text-xl font-black uppercase italic tracking-tighter">Narrow Fitness</span>
                 </div>
                 <button onClick={() => setIsMobileMenuOpen(false)}><X className="w-6 h-6" /></button>
               </div>
+              
               <nav className="flex-1 px-4 space-y-2">
                 {sidebarLinks.map((link) => (
-                  <Link key={link.id} to={link.path} onClick={() => setIsMobileMenuOpen(false)} className={`flex items-center gap-4 px-4 py-4 rounded-xl font-bold uppercase text-[10px] tracking-widest ${location.pathname === link.path ? 'bg-orange-600 text-white' : 'text-gray-50'}`}>
+                  <Link 
+                    key={link.id} 
+                    to={link.path} 
+                    onClick={() => setIsMobileMenuOpen(false)} 
+                    className={`flex items-center gap-4 px-4 py-4 rounded-xl font-bold uppercase text-[10px] tracking-widest transition-all ${location.pathname === link.path ? 'bg-orange-600 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+                  >
                     <link.icon className="w-5 h-5" /> {link.name}
                   </Link>
                 ))}
               </nav>
+
+              {/* MOBILE LOGOUT BUTTON */}
+              <div className="p-6 border-t border-gray-900 mt-auto">
+                <button 
+                  onClick={() => { setIsMobileMenuOpen(false); setShowLogoutConfirm(true); }} 
+                  className="w-full flex items-center gap-4 px-4 py-4 rounded-xl font-bold uppercase text-[10px] tracking-widest text-red-500 hover:bg-red-500/10 transition-all"
+                >
+                  <LogOut className="w-5 h-5" /> Logout
+                </button>
+              </div>
             </motion.aside>
            </>
         )}
