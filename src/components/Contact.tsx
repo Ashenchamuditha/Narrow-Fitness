@@ -121,8 +121,10 @@ export default function Contact() {
                   <MapPin className="w-6 h-6 text-orange-600 group-hover:text-white transition-all" />
                 </div>
                 <div>
-                  <div className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Headquarters</div>
-                  <div className="text-xl font-bold text-black">No 45, Elite Plaza, Colombo 07</div>
+                  <div className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">We are Here</div>
+                  <div className="text-xl font-bold text-black">182/1/D Ganemulla Rd ,
+Sooriyagama,
+Kadawatha. Sri Lanka</div>
                 </div>
               </div>
             </div>

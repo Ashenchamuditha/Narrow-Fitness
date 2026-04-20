@@ -88,8 +88,8 @@ export default function Footer() {
             <ul className="space-y-4">
               {[
                 { day: 'Mon - Fri', time: '5:00 AM - 11:00 PM' },
-                { day: 'Saturday', time: '6:00 AM - 9:00 PM' },
-                { day: 'Sunday', time: '7:00 AM - 6:00 PM' },
+                { day: 'Saturday', time: '7:00 AM - 10:00 PM' },
+                { day: 'Sunday', time: '6:00 AM - 11:30 PM' },
               ].map((item, idx) => (
                 <li key={idx} className="flex flex-col gap-1 border-l-2 border-gray-900 pl-4">
                   <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{item.day}</span>
@@ -107,9 +107,9 @@ export default function Footer() {
               <div className="flex gap-4">
                 <MapPin className="w-5 h-5 text-orange-500 shrink-0" />
                 <p className="text-sm text-gray-400 font-bold leading-snug uppercase tracking-tight">
-                  123 Fitness Avenue, <br />
-                  Elite District, Muscle City <br />
-                  Colombo 07, Sri Lanka
+                  182/1/D Ganemulla Rd  , <br />
+                  Sooriyagama, <br />
+                  Kadawatha, Sri Lanka
                 </p>
               </div>
 
@@ -124,7 +124,7 @@ export default function Footer() {
               </div>
 
               <a 
-                href="https://maps.google.com" 
+                href="https://www.google.com/maps/place/Narrow+fitness+Gym+182%2F1%2FD+Ganemulla+Rd+Surriyagama+Kadawatha/@7.0248143,79.9571436,18.5z/data=!4m14!1m7!3m6!1s0x3ae2f900318f7329:0x30e54c98ba46dfb6!2sNarrow+fitness+Gym+182%2F1%2FD+Ganemulla+Rd+Surriyagama+Kadawatha!8m2!3d7.0247685!4d79.9571566!16s%2Fg%2F11wfk6tgyj!3m5!1s0x3ae2f900318f7329:0x30e54c98ba46dfb6!8m2!3d7.0247685!4d79.9571566!16s%2Fg%2F11wfk6tgyj?entry=ttu&g_ep=EgoyMDI2MDQxNS4wIKXMDSoASAFQAw%3D%3D" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 bg-orange-600 text-white px-5 py-3 rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-white hover:text-black transition-all shadow-lg shadow-orange-600/10"
