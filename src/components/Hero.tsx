@@ -34,7 +34,6 @@ export default function Hero() {
           alt="Gym Background"
           className="w-full h-full object-cover opacity-50 md:opacity-60"
         />
-        {/* Gradients for text readability */}
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent" />
         <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/20" />
       </div>
@@ -75,32 +74,32 @@ export default function Hero() {
             Sri Lanka's premier destination for strength and personal transformation. Join an elite community built on results.
           </motion.p>
 
-          {/* CTA Buttons */}
+          {/* CTA Buttons - FIXED SPACING (added md:mb-32) */}
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
-            className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto mb-20 md:mb-0"
+            className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto mb-20 md:mb-32"
           >
             <Link to="/auth" className="w-full sm:w-auto">
               <button className="w-full flex items-center justify-center gap-3 bg-white text-black hover:bg-orange-500 hover:text-white px-8 py-5 rounded-2xl font-black uppercase tracking-widest text-xs transition-all transform active:scale-95 shadow-2xl">
-                Join The Elite <ChevronRight className="w-4 h-4" />
+                Join Here <ChevronRight className="w-4 h-4" />
               </button>
             </Link>
             
             <a href="#pricing" className="w-full sm:w-auto">
-              <button className="w-full flex items-center justify-center gap-3 bg-white/5 backdrop-blur-md text-white hover:bg-white/10 px-8 py-5 rounded-2xl font-black uppercase tracking-widest text-xs transition-all border border-white/10">
-                View Memberships
+              <button className="w-full flex items-center justify-center gap-3 bg-white/5 backdrop-blur-md text-white hover:bg-white/20 px-8 py-5 rounded-2xl font-black uppercase tracking-widest text-xs transition-all border border-white/10">
+                Explore Plans
               </button>
             </a>
           </motion.div>
         </div>
       </div>
 
-      {/* --- ENHANCED LIVE STATS OVERLAY --- */}
+      {/* --- LIVE STATS OVERLAY --- */}
       <div className="relative md:absolute bottom-0 md:bottom-10 left-0 w-full z-20 pb-12 md:pb-0">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
-          {/* Stats Bar */}
+          {/* The line mentioned is created by the border-t below */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-y-10 gap-x-6 border-t border-white/10 pt-10">
             {[
               { label: 'Active Athletes', value: stats.members, icon: Users },
