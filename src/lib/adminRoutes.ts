@@ -287,6 +287,37 @@ router.put("/trainers/:id", async (req, res) => {
     res.status(500).json({ message: "Update failed: " + err.message });
   }
 });
+// 4. DELETE Trainer: Permanently remove from elite roster
+router.delete("/trainers/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    console.log(`🗑️ [Backend] Request to delete trainer ID: ${id}`);
+
+    // We use RETURNING name so we can log exactly who was deleted
+    const result = await query(
+      "DELETE FROM trainers WHERE id = $1 RETURNING name",
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      console.log(`⚠️ [Backend] Delete failed: Trainer ID ${id} not found.`);
+      return res.status(404).json({ message: "Trainer not found in database." });
+    }
+
+    const trainerName = result.rows[0].name;
+    console.log(`✅ [Backend] SUCCESS: Trainer "${trainerName}" has been removed.`);
+
+    res.json({ 
+      success: true, 
+      message: `Trainer ${trainerName} removed from elite roster successfully.` 
+    });
+
+  } catch (err: any) {
+    console.error("❌ [Backend] CRITICAL DELETE ERROR:", err.message);
+    res.status(500).json({ message: "System error while deleting trainer profile." });
+  }
+});
 // --- CLASSES MANAGEMENT ---
 
 // 1. GET all classes (Joining with Trainers and counting pending bookings)
