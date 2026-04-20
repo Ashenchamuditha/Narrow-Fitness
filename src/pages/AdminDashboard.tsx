@@ -54,41 +54,48 @@ export default function AdminDashboard() {
   }, []);
 
   // 2. DATA FETCHING
-  useEffect(() => {
-    const storedUser = localStorage.getItem('narrow_fitness_user');
-    if (!storedUser) {
-      navigate('/auth');
-      return;
-    }
+ useEffect(() => {
+  const storedUser = localStorage.getItem('narrow_fitness_user');
+  if (!storedUser) {
+    navigate('/auth');
+    return;
+  }
 
-    const parsedUser = JSON.parse(storedUser);
-    if (parsedUser.role?.toLowerCase() !== 'admin') {
-      navigate('/member');
-      return;
-    }
+  const parsedUser = JSON.parse(storedUser);
+  if (parsedUser.role?.toLowerCase() !== 'admin') {
+    navigate('/member');
+    return;
+  }
 
-    const fetchDashboardData = async () => {
-      try {
-        setLoading(true);
-        const statsRes = await fetch('http://localhost:5000/api/admin/stats');
-        if (statsRes.ok) {
-          const statsData = await statsRes.json();
-          setStats(statsData);
-        }
-        const usersRes = await fetch('http://localhost:5000/api/admin/users/recent');
-        if (usersRes.ok) {
-          const usersData = await usersRes.json();
-          setRecentUsers(usersData);
-        }
-      } catch (err) {
-        console.error('❌ Dashboard Load Error:', err);
-      } finally {
-        setLoading(false);
+  // ✅ STEP 1: Determine if we are on Localhost or Live
+  // If localhost, use the full path. If Live, use a relative path.
+  const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:5000' : '';
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      
+      // ✅ STEP 2: Use the dynamic API_BASE variable
+      const statsRes = await fetch(`${API_BASE}/api/admin/stats`);
+      if (statsRes.ok) {
+        const statsData = await statsRes.json();
+        setStats(statsData);
       }
-    };
 
-    fetchDashboardData();
-  }, [navigate]);
+      const usersRes = await fetch(`${API_BASE}/api/admin/users/recent`);
+      if (usersRes.ok) {
+        const usersData = await usersRes.json();
+        setRecentUsers(usersData);
+      }
+    } catch (err) {
+      console.error('❌ Dashboard Load Error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchDashboardData();
+}, [navigate]);
 
   // --- BROADCAST HANDLER ---
   const handleSendBroadcast = async (e: React.FormEvent) => {

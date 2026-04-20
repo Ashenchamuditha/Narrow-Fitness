@@ -2,27 +2,27 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
-// https://vitejs.dev/config/
+// Fix for __dirname in ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
-      // This allows you to use '@' as a shortcut for the 'src' folder
       '@': path.resolve(__dirname, './src'),
     },
   },
   build: {
-    // This tells Vite to put the finished website files in the 'dist' folder
     outDir: 'dist',
-    // This ensures old files are cleared before building new ones
     emptyOutDir: true,
-    // Ensures the build is optimized for production
     sourcemap: false,
   },
   server: {
-    // Local development proxy (only used when running npm run dev)
     proxy: {
+      // This bridges the gap between Port 5173 and Port 5000
       '/api': {
         target: 'http://localhost:5000',
         changeOrigin: true,

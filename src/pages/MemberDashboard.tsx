@@ -28,7 +28,7 @@ export default function MemberDashboard() {
   const [user, setUser] = useState<any>(null);
   const [classes, setClasses] = useState<any[]>([]);
   const [activeWorkout, setActiveWorkout] = useState<string | null>(null);
-  const [lastAiMessage, setLastAiMessage] = useState<string>("Ready to crush your goals? Ask me anything!");
+  const [lastAiMessage, setLastAiMessage] = useState<string>("Ready to achieve your goals? Ask me anything!");
   const [lastAiTime, setLastAiTime] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   
