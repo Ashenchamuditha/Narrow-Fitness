@@ -14,7 +14,10 @@ import bcrypt from "bcryptjs";
 // --- DATABASE CONNECTION (Defined here to stop the import error) ---
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false }
+  // THE FIX: Only use SSL if we are NOT on localhost
+  ssl: process.env.DATABASE_URL?.includes('localhost') 
+    ? false 
+    : { rejectUnauthorized: false }
 });
 
 // This creates the 'query' function that your routes need
