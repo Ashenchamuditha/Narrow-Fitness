@@ -10,7 +10,10 @@ import {
   X, 
   Lock, 
   Crown, 
-  ShieldCheck 
+  ShieldCheck,
+  Timer,
+  Ban,
+  History
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
@@ -22,13 +25,21 @@ interface ClassData {
   class_day: string;
   capacity: number;
   image?: string;
+  is_cancelled?: boolean; // Added to track admin cancellation
 }
 
 export default function Classes() {
   const [classes, setClasses] = useState<ClassData[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
   const navigate = useNavigate();
+
+  // Update current time every second for the countdown
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const fetchClasses = async () => {
@@ -47,10 +58,56 @@ export default function Classes() {
     fetchClasses();
   }, []);
 
-  const handleBookingAttempt = (e: React.MouseEvent, classId: number) => {
+  // --- HELPER: CALCULATE TIME & STATUS ---
+  const getSessionStatus = (cls: ClassData) => {
+    if (cls.is_cancelled) {
+      return { 
+        label: "Cancelled by Management", 
+        color: "bg-red-500 text-white border-red-400", 
+        icon: Ban, 
+        isLive: false,
+        disabled: true 
+      };
+    }
+
+    const sessionDate = new Date(`${cls.class_day}T${cls.class_time}`);
+    const timeDiff = sessionDate.getTime() - currentTime.getTime();
+
+    if (timeDiff < 0) {
+      return { 
+        label: "Expired Session", 
+        color: "bg-slate-500 text-white border-slate-400", 
+        icon: History, 
+        isLive: false,
+        disabled: true 
+      };
+    }
+
+    // Calculate Countdown
+    const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
+
+    let countdownText = "";
+    if (days > 0) countdownText = `${days}d ${hours}h ${minutes}m`;
+    else if (hours > 0) countdownText = `${hours}h ${minutes}m ${seconds}s`;
+    else countdownText = `${minutes}m ${seconds}s`;
+
+    return { 
+      label: `Starts in: ${countdownText}`, 
+      color: "bg-blue-600 text-white border-blue-400 shadow-[0_0_15px_rgba(37,99,235,0.4)]", 
+      icon: Timer, 
+      isLive: true,
+      disabled: false 
+    };
+  };
+
+  const handleBookingAttempt = (e: React.MouseEvent, cls: ClassData, status: any) => {
     e.preventDefault();
+    if (status.disabled) return;
+
     const storedUser = localStorage.getItem('narrow_fitness_user');
-    
     if (!storedUser) {
       setShowAuthModal(true);
     } else {
@@ -65,53 +122,15 @@ export default function Classes() {
       <AnimatePresence>
         {showAuthModal && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowAuthModal(false)}
-              className="absolute inset-0 bg-black/80 backdrop-blur-md"
-            />
-            
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="relative bg-white rounded-[3rem] p-10 max-w-sm w-full text-center shadow-2xl border border-gray-100"
-            >
-              <button 
-                onClick={() => setShowAuthModal(false)}
-                className="absolute top-6 right-6 p-2 bg-gray-50 rounded-full hover:bg-red-50 hover:text-red-500 transition-all"
-              >
-                <X className="w-5 h-5" />
-              </button>
-
-              <div className="w-20 h-20 bg-orange-100 rounded-[2rem] flex items-center justify-center mx-auto mb-6">
-                 <Lock className="w-10 h-10 text-orange-600" />
-              </div>
-
-              <h3 className="text-2xl font-black uppercase italic tracking-tighter text-slate-900 mb-2">
-                Member <span className="text-orange-600">Access</span> Only
-              </h3>
-              <p className="text-slate-500 text-sm font-bold uppercase tracking-widest leading-relaxed mb-10">
-                Create an account to reserve your seat in this session.
-              </p>
-
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowAuthModal(false)} className="absolute inset-0 bg-black/80 backdrop-blur-md" />
+            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="relative bg-white rounded-[3rem] p-10 max-w-sm w-full text-center shadow-2xl border border-gray-100">
+              <button onClick={() => setShowAuthModal(false)} className="absolute top-6 right-6 p-2 bg-gray-50 rounded-full hover:bg-red-50 hover:text-red-500 transition-all"><X className="w-5 h-5" /></button>
+              <div className="w-20 h-20 bg-orange-100 rounded-[2rem] flex items-center justify-center mx-auto mb-6"><Lock className="w-10 h-10 text-orange-600" /></div>
+              <h3 className="text-2xl font-black uppercase italic tracking-tighter text-slate-900 mb-2">Member <span className="text-orange-600">Access</span> Only</h3>
+              <p className="text-slate-500 text-sm font-bold uppercase tracking-widest leading-relaxed mb-10">Create an account to reserve your seat in this session.</p>
               <div className="space-y-4 flex flex-col items-center">
-                <Link 
-                  to="/auth" 
-                  className="flex items-center justify-center gap-3 w-full py-5 bg-black text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-orange-600 transition-all shadow-xl shadow-orange-100"
-                >
-                  <Crown className="w-4 h-4 text-orange-500" /> Join Narrow Fitness
-                </Link>
-                
-                {/* FIXED: Increased contrast and padding for visibility */}
-                <button 
-                  onClick={() => setShowAuthModal(false)}
-                  className="w-full py-2 text-xs font-black text-slate-500 uppercase tracking-widest hover:text-black transition-colors"
-                >
-                  Maybe Later
-                </button>
+                <Link to="/auth" className="flex items-center justify-center gap-3 w-full py-5 bg-black text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-orange-600 transition-all shadow-xl shadow-orange-100"><Crown className="w-4 h-4 text-orange-500" /> Join Narrow Fitness</Link>
+                <button onClick={() => setShowAuthModal(false)} className="w-full py-2 text-xs font-black text-slate-500 uppercase tracking-widest hover:text-black transition-colors">Maybe Later</button>
               </div>
             </motion.div>
           </div>
@@ -129,43 +148,72 @@ export default function Classes() {
           <div className="flex justify-center py-20"><div className="w-12 h-12 border-4 border-slate-100 border-t-orange-600 rounded-full animate-spin"></div></div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-            {classes.map((cls, index) => (
-              <motion.div key={cls.id} initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.1 }} viewport={{ once: true }} className="group bg-white rounded-[40px] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.08)] hover:shadow-orange-500/20 transition-all duration-500 border border-slate-100">
-                <div className="relative h-52 overflow-hidden bg-gray-100">
-                   <div className="w-full h-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center p-8 relative">
-                      <Zap className="absolute -right-4 -bottom-4 w-32 h-32 text-white/10 -rotate-12" />
-                      <div className="text-white font-black italic text-4xl uppercase tracking-tighter z-10 leading-none drop-shadow-lg">{cls.name}</div>
-                   </div>
-                   <div className="absolute top-4 left-4 bg-black/90 backdrop-blur-md text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl shadow-xl">{cls.class_time}</div>
-                </div>
+            {classes.map((cls, index) => {
+              const status = getSessionStatus(cls);
+              const StatusIcon = status.icon;
 
-                <div className="p-8">
-                  <div className="flex flex-col mb-6">
-                    <span className="text-[10px] font-black text-orange-600 uppercase tracking-widest mb-1">{cls.class_day}</span>
-                    <h3 className="text-2xl font-black text-black uppercase italic tracking-tighter">{cls.name}</h3>
+              return (
+                <motion.div 
+                  key={cls.id} 
+                  initial={{ opacity: 0, y: 30 }} 
+                  whileInView={{ opacity: 1, y: 0 }} 
+                  transition={{ delay: index * 0.1 }} 
+                  viewport={{ once: true }} 
+                  className={`group bg-white rounded-[40px] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.08)] transition-all duration-500 border border-slate-100 relative ${status.disabled ? 'grayscale opacity-75' : 'hover:shadow-orange-500/20'}`}
+                >
+                  {/* Status Overlay for Cancelled/Expired */}
+                  {status.disabled && (
+                    <div className="absolute inset-0 z-20 bg-white/10 backdrop-blur-[2px] pointer-events-none" />
+                  )}
+
+                  <div className="relative h-52 overflow-hidden bg-gray-100">
+                     <div className={`w-full h-full flex items-center justify-center p-8 relative transition-colors duration-500 ${status.disabled ? 'bg-slate-200' : 'bg-gradient-to-br from-orange-400 to-orange-600'}`}>
+                        <Zap className="absolute -right-4 -bottom-4 w-32 h-32 text-white/10 -rotate-12" />
+                        <div className="text-white font-black italic text-4xl uppercase tracking-tighter z-10 leading-none drop-shadow-lg text-center">{cls.name}</div>
+                     </div>
+                     
+                     {/* THE DYNAMIC STATUS BADGE */}
+                     <div className={`absolute top-4 left-4 flex items-center gap-2 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest shadow-xl border z-30 ${status.color}`}>
+                        <StatusIcon className={`w-3 h-3 ${status.isLive ? 'animate-pulse' : ''}`} />
+                        {status.label}
+                     </div>
+
+                     <div className="absolute bottom-4 right-4 bg-black/90 backdrop-blur-md text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl shadow-xl z-30">{cls.class_time}</div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4 mb-8">
-                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center gap-3">
-                      <div className="p-2 bg-white rounded-lg shadow-sm border border-slate-100"><User className="w-4 h-4 text-orange-600" /></div>
-                      <div className="overflow-hidden"><p className="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">Coach</p><p className="text-[10px] font-black text-black uppercase truncate">{cls.trainer_name || 'Expert'}</p></div>
+                  <div className="p-8 relative z-10">
+                    <div className="flex flex-col mb-6">
+                      <span className="text-[10px] font-black text-orange-600 uppercase tracking-widest mb-1">{cls.class_day}</span>
+                      <h3 className="text-2xl font-black text-black uppercase italic tracking-tighter">{cls.name}</h3>
                     </div>
-                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center gap-3">
-                      <div className="p-2 bg-white rounded-lg shadow-sm border border-slate-100"><Users className="w-4 h-4 text-orange-600" /></div>
-                      <div><p className="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">Capacity</p><p className="text-[10px] font-black text-black uppercase">{cls.capacity} Max</p></div>
-                    </div>
-                  </div>
 
-                  <button 
-                    onClick={(e) => handleBookingAttempt(e, cls.id)}
-                    className="w-full group/btn flex items-center justify-center gap-3 bg-black text-white hover:bg-orange-600 px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all duration-300 transform active:scale-95 shadow-xl shadow-black/10"
-                  >
-                    <span>Book Session</span>
-                    <ArrowRight className="w-4 h-4 group-hover/btn:translate-x-2 transition-transform" />
-                  </button>
-                </div>
-              </motion.div>
-            ))}
+                    <div className="grid grid-cols-2 gap-4 mb-8">
+                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center gap-3">
+                        <div className="p-2 bg-white rounded-lg shadow-sm border border-slate-100"><User className="w-4 h-4 text-orange-600" /></div>
+                        <div className="overflow-hidden"><p className="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">Coach</p><p className="text-[10px] font-black text-black uppercase truncate">{cls.trainer_name || 'Expert'}</p></div>
+                      </div>
+                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center gap-3">
+                        <div className="p-2 bg-white rounded-lg shadow-sm border border-slate-100"><Users className="w-4 h-4 text-orange-600" /></div>
+                        <div><p className="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">Capacity</p><p className="text-[10px] font-black text-black uppercase">{cls.capacity} Max</p></div>
+                      </div>
+                    </div>
+
+                    <button 
+                      disabled={status.disabled}
+                      onClick={(e) => handleBookingAttempt(e, cls, status)}
+                      className={`w-full group/btn flex items-center justify-center gap-3 px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all duration-300 transform active:scale-95 shadow-xl ${
+                        status.disabled 
+                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200' 
+                        : 'bg-black text-white hover:bg-orange-600 shadow-black/10'
+                      }`}
+                    >
+                      <span>{status.disabled ? 'Unavailable' : 'Book Session'}</span>
+                      {!status.disabled && <ArrowRight className="w-4 h-4 group-hover/btn:translate-x-2 transition-transform" />}
+                    </button>
+                  </div>
+                </motion.div>
+              );
+            })}
           </div>
         )}
       </div>
