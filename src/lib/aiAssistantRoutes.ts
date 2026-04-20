@@ -1,6 +1,5 @@
 import { Router } from "express";
-import { query } from './db.js';
-
+import { query } from '../../api/index.js'; 
 const aiRouter = Router();
 
 // --- 1. FETCH CHAT HISTORY & STATUS ---

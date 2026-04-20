@@ -1,6 +1,6 @@
 // route.ts
 import express from 'express';
-import { query } from './db.js';
+import { query } from '../../api/index.js'; 
 import { Router } from "express";
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';

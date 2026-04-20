@@ -11,17 +11,40 @@ const { Pool } = pkg;
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 
-// --- DATABASE CONNECTION (Defined here to stop the import error) ---
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  // THE FIX: Only use SSL if we are NOT on localhost
-  ssl: process.env.DATABASE_URL?.includes('localhost') 
-    ? false 
-    : { rejectUnauthorized: false }
+// 1. DETERMINE ENVIRONMENT
+const dbUrl = process.env.DATABASE_URL || "";
+const isLocal = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
+
+// 2. CREATE CONFIG DYNAMICALLY
+const poolConfig: any = {
+  connectionString: dbUrl,
+};
+
+// ONLY add SSL if we are NOT on localhost (for Neon Cloud)
+if (!isLocal) {
+  poolConfig.ssl = {
+    rejectUnauthorized: false
+  };
+  console.log("🚀 DATABASE: Cloud Mode (SSL Enabled)");
+} else {
+  console.log("🏠 DATABASE: Local Mode (SSL Disabled)");
+}
+
+const pool = new Pool(poolConfig);
+
+// 3. EXPORT QUERY FOR ALL ROUTERS
+export const query = (text: string, params?: any[]) => pool.query(text, params);
+
+// Test the connection immediately on startup
+pool.query('SELECT NOW()', (err, res) => {
+  if (err) {
+    console.error('❌ DATABASE CONNECTION FAILED:', err.message);
+  } else {
+    console.log('✅ DATABASE CONNECTED SUCCESSFULLY');
+  }
 });
 
-// This creates the 'query' function that your routes need
-export const query = (text: string, params?: any[]) => pool.query(text, params);
+
 
 // Router Imports
 // Change from './src/lib/...' to '../src/lib/...'
