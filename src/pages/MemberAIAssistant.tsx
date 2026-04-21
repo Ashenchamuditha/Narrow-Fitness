@@ -10,11 +10,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-// --- TYPES ---
-interface Suggestion { text: string; icon: React.ElementType; }
-interface Attachment { name: string; type: string; extractedText: string; icon: React.ElementType; }
+// --- ELITE UI COMPONENTS ---
 
-// --- MEMOIZED MESSAGE LIST (Eliminates Typing Latency) ---
 const ChatMessages = memo(({ messages }: { messages: any[] }) => (
   <div className="space-y-10 pb-10">
     {messages.map((msg) => (
@@ -28,7 +25,7 @@ const ChatMessages = memo(({ messages }: { messages: any[] }) => (
           msg.role === 'user' ? 'bg-slate-900 text-white rounded-br-none border border-slate-800' : 'bg-white text-slate-800 rounded-tl-none border border-slate-100'
         }`}>
           {msg.inputType === 'file' && (
-            <div className="flex items-center gap-2 mb-4 pb-2 border-b border-orange-500/10 text-orange-400 text-[10px] font-black italic">
+            <div className="flex items-center gap-2 mb-4 pb-2 border-b border-white/10 text-orange-400 text-[10px] font-black italic">
               <FileText className="w-3" /> analyzing workout: {msg.fileName}
             </div>
           )}
@@ -73,7 +70,7 @@ export default function MemberAIAssistant() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
-  // --- 1. STATES ---
+  // --- STATES ---
   const [user, setUser] = useState<any>(null);
   const [sessions, setSessions] = useState<any[]>([]);
   const [currentSid, setCurrentSid] = useState<number | null>(null);
@@ -93,7 +90,7 @@ export default function MemberAIAssistant() {
   const [usageInfo, setUsageInfo] = useState({ current: 0, max: 10, sessionMax: 30 });
   const [isListening, setIsListening] = useState(false);
 
-  // --- 2. FUNCTIONS (Hoisted/Declared before Use) ---
+  // --- FUNCTIONS (Hoisted before Use) ---
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -116,6 +113,9 @@ export default function MemberAIAssistant() {
         setMessages(data.messages.map((m: any) => ({
           role: m.role, text: m.message, id: m.id, inputType: m.input_type, fileName: m.file_name, createdAt: m.created_at
         })));
+        if (data.messages.length === 0) {
+            setMessages([{ role: 'model', text: `Vanguard Link Active. Systems ready. Let's engineer your peak performance.`, id: 'welcome' }]);
+        }
         setTimeout(scrollToBottom, 100);
       });
   };
@@ -161,17 +161,25 @@ export default function MemberAIAssistant() {
 
     const currentInputType = attachedFiles.length > 0 ? 'file' : 'text';
     const currentFileName = attachedFiles.length > 0 ? attachedFiles[0].name : null;
+
+    // ✅ FIXED: COMBINE INPUT AND ATTACHED TEXT
     let finalMessage = input;
     if (attachedFiles.length > 0) {
         finalMessage += `\n\nATTACHED WORKOUT CONTEXT:\n` + attachedFiles.map(f => f.extractedText).join("\n");
     }
     
-    // Add user message to state immediately
     const userMsgId = Date.now();
-    setMessages(prev => [...prev, { role: 'user', text: input || "analyzing attachments...", id: userMsgId, createdAt: new Date() }]);
+    setMessages(prev => [...prev, { 
+        role: 'user', 
+        text: input || "analyzing attachments...", 
+        id: userMsgId, 
+        createdAt: new Date(),
+        inputType: currentInputType,
+        fileName: currentFileName 
+    }]);
     
     setInput('');
-    setAttachedFiles([]);
+    setAttachedFiles([]); // Clear shelf
     setIsLoading(true);
     setTimeout(scrollToBottom, 50);
 
@@ -179,44 +187,25 @@ export default function MemberAIAssistant() {
       const res = await fetch('/api/member/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-            userId: user.id, 
-            message: finalMessage, 
-            sessionId: currentSid, 
-            inputType: currentInputType, 
-            fileName: currentFileName 
-        })
+        body: JSON.stringify({ userId: user.id, message: finalMessage, sessionId: currentSid, inputType: currentInputType, fileName: currentFileName })
       });
       const data = await res.json();
       
       if (res.ok) {
-        // --- FIXED: UPDATE STATE IMMEDIATELY WITH AI RESPONSE ---
-        setMessages(prev => [...prev, { 
-            role: 'model', 
-            text: data.text, 
-            id: Date.now() + 1, 
-            createdAt: new Date(),
-            inputType: 'text' 
-        }]);
-
-        // Dynamically update limits based on user package
-        const pkg = (user.package_name || '').toLowerCase();
-        let maxDaily = 10; let maxSession = 30;
-        if (user.role === 'admin') maxDaily = 100;
-        else if (pkg.includes('pro')) { maxDaily = 20; maxSession = 50; }
-        else if (pkg.includes('personal') || pkg.includes('elite')) { maxDaily = 35; maxSession = 50; }
-        
-        setUsageInfo({ current: data.usage.current, max: maxDaily, sessionMax: maxSession });
+        setMessages(prev => [...prev, { role: 'model', text: data.text, id: Date.now() + 1, createdAt: new Date() }]);
+        if (data.usage) {
+            setUsageInfo({
+              current: data.usage.current,
+              max: data.usage.max,
+              sessionMax: data.usage.sessionMax
+            });
+        }
       } else if (res.status === 403 || res.status === 422) {
-        setLimitReached(true); 
-        setLockMessage(data.message);
+        setLimitReached(true); setLockMessage(data.message);
       }
     } catch (error) {
-        console.error("AI Link Failure");
-    } finally { 
-        setIsLoading(false); 
-        setTimeout(scrollToBottom, 150); 
-    }
+        console.error("AI Analysis Failed");
+    } finally { setIsLoading(false); setTimeout(scrollToBottom, 150); }
   };
 
   const handleFileUpload = async (e: any) => {
@@ -231,26 +220,16 @@ export default function MemberAIAssistant() {
   };
 
   const toggleVoice = () => {
-  const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-  if (!SpeechRecognition) return alert("voice not supported");
-  
-  const rec = new SpeechRecognition();
-  
-  // ✅ THE FIX: Set language to detect both or default to Sinhala
-  // 'si-LK' is the code for Sinhala (Sri Lanka)
-  rec.lang = 'si-LK'; 
-
-  if (!isListening) {
-    rec.start(); 
-    setIsListening(true);
-    rec.onresult = (e: any) => { 
-      setInput(prev => prev + " " + e.results[0][0].transcript); 
-      setIsListening(false); 
-    };
-    rec.onerror = () => setIsListening(false);
-    rec.onend = () => setIsListening(false);
-  }
-};
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return alert("voice not supported");
+    const rec = new SpeechRecognition();
+    rec.lang = 'si-LK'; // ✅ Fixed for Sinhala Support
+    if (!isListening) {
+      rec.start(); setIsListening(true);
+      rec.onresult = (e: any) => { setInput(prev => prev + " " + e.results[0][0].transcript); setIsListening(false); };
+      rec.onerror = () => setIsListening(false);
+    }
+  };
 
   // --- 3. EFFECTS ---
   useEffect(() => {
@@ -282,11 +261,11 @@ export default function MemberAIAssistant() {
            <div className="flex-1 overflow-y-auto space-y-3 no-scrollbar pr-1">
               {sessions.map(s => (
                 <div key={s.id} className="relative group">
-                    <button onClick={() => switchSession(s.id)} className={`w-full text-left p-5 rounded-2xl transition-all border ${currentSid === s.id ? 'bg-orange-50 border-orange-200 text-orange-600 shadow-md' : 'bg-slate-50 border-transparent text-slate-400 hover:bg-slate-100'}`}>
+                    <button onClick={() => switchSession(s.id)} className={`w-full text-left p-5 rounded-2xl transition-all border ${currentSid === s.id ? 'bg-orange-50 border-orange-200 text-orange-600 shadow-md' : 'bg-slate-50 border-transparent hover:bg-slate-100'}`}>
                         <p className="text-[11px] font-black italic truncate leading-none pr-6">"{s.title}"</p>
                         <p className="text-[8px] font-bold mt-2 opacity-50 uppercase tracking-widest">{new Date(s.created_at).toLocaleDateString()}</p>
                     </button>
-                    <button onClick={(e) => deleteSession(e, s.id)} className="absolute right-4 top-5 p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={(e) => deleteSession(e, s.id)} className="absolute right-4 top-5 p-1.5 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-3.5 h-3.5" /></button>
                 </div>
               ))}
            </div>
@@ -295,6 +274,7 @@ export default function MemberAIAssistant() {
         {/* --- MAIN CHAT UI --- */}
         <div className="flex-1 flex flex-col bg-white rounded-[2.5rem] border border-slate-100 shadow-2xl overflow-hidden relative">
           
+          {/* Header */}
           <div className="px-5 py-4 border-b border-slate-50 flex justify-between items-center bg-white/95 backdrop-blur-md z-20 shadow-sm">
             <div className="flex items-center gap-3">
               <button onClick={() => setIsDrawerOpen(true)} className="lg:hidden p-2.5 bg-slate-50 text-slate-900 rounded-xl"><Menu className="w-5" /></button>
@@ -304,20 +284,16 @@ export default function MemberAIAssistant() {
                  <span className="text-[8px] font-black text-green-500 uppercase tracking-widest mt-1 block">link active</span>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-                <button onClick={() => setIsNewSessionModalOpen(true)} className="p-2.5 bg-slate-900 text-white rounded-xl hover:bg-orange-600 transition-all shadow-md">
-                    <Plus className="w-5" />
-                </button>
-                <button onClick={() => setIsInfoOpen(true)} className="p-2.5 bg-slate-50 text-slate-400 rounded-xl hover:bg-orange-600 hover:text-white transition-all shadow-sm"><Info className="w-5" /></button>
-            </div>
+            {/* ✅ "Add Session" Button removed from here per request */}
+            <button onClick={() => setIsInfoOpen(true)} className="p-2.5 bg-slate-50 text-slate-400 rounded-xl hover:bg-orange-600 hover:text-white transition-all shadow-sm"><Info className="w-5" /></button>
           </div>
 
-          <div ref={chatContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 lg:px-16 space-y-10 no-scrollbar bg-[#fcfcfc]">
+          <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 lg:px-16 space-y-10 no-scrollbar bg-[#fcfcfc]">
             <ChatMessages messages={messages} />
             {(isLoading || isProcessingMedia) && (
               <div className="flex justify-start items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center border border-orange-100"><RefreshCw className="w-4 text-orange-600 animate-spin" /></div>
-                <div className="text-[10px] font-bold text-orange-500 animate-pulse">processing protocols...</div>
+                <div className="text-[10px] font-bold text-orange-500 animate-pulse uppercase tracking-tighter">analysing biometrics...</div>
               </div>
             )}
             <div ref={messagesEndRef} />
@@ -332,17 +308,19 @@ export default function MemberAIAssistant() {
           </AnimatePresence>
 
           <div className="px-3 lg:px-12 pb-6 lg:pb-8 pt-4 bg-white border-t border-slate-50">
-            {attachedFiles.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-4">
-                    {attachedFiles.map((file, idx) => (
-                        <div key={idx} className="flex items-center gap-2 px-3 py-2 bg-slate-900 text-white rounded-xl shadow-lg border border-white/10">
-                            <file.icon className="w-4 text-orange-500" />
-                            <span className="text-[9px] font-bold truncate max-w-[100px]">{file.name}</span>
-                            <button onClick={() => setAttachedFiles(f => f.filter((_, i) => i !== idx))} className="text-orange-600 p-0.5"><X className="w-3.5" /></button>
-                        </div>
-                    ))}
-                </div>
-            )}
+            <AnimatePresence>
+              {attachedFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-4">
+                      {attachedFiles.map((file, idx) => (
+                          <div key={idx} className="flex items-center gap-2 px-3 py-2 bg-slate-900 text-white rounded-xl shadow-lg border border-white/10">
+                              <file.icon className="w-4 text-orange-500" />
+                              <span className="text-[9px] font-bold truncate max-w-[100px]">{file.name}</span>
+                              <button onClick={() => setAttachedFiles(f => f.filter((_, i) => i !== idx))} className="text-orange-600 p-0.5"><X className="w-3.5" /></button>
+                          </div>
+                      ))}
+                  </div>
+              )}
+            </AnimatePresence>
 
             <div className="flex items-center gap-2 lg:gap-3 max-w-5xl mx-auto">
               <label className="p-3.5 lg:p-4 bg-slate-100 text-slate-400 rounded-2xl hover:bg-slate-200 cursor-pointer transition-all shrink-0">
@@ -358,6 +336,18 @@ export default function MemberAIAssistant() {
               <button onClick={toggleVoice} disabled={limitReached} className={`p-3.5 lg:p-4 rounded-2xl transition-all shrink-0 ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-900 text-white hover:bg-orange-600'}`}><Mic className="w-5" /></button>
             </div>
           </div>
+
+          {/* Cooldown/Limit Overlay */}
+          {limitReached && (
+             <div className="absolute inset-0 z-50 bg-white/80 backdrop-blur-md flex items-center justify-center p-6 text-center px-4">
+                <div className="bg-slate-900 rounded-[3rem] p-10 max-sm w-full shadow-2xl border border-orange-500/30">
+                    <Timer className="w-12 text-white mx-auto mb-6 shadow-glow" />
+                    <h4 className="text-2xl font-black text-white italic mb-2 leading-none uppercase tracking-tighter">session capped</h4>
+                    <p className="text-slate-400 text-sm font-medium mb-10 leading-relaxed">{lockMessage}</p>
+                    <button onClick={() => window.location.reload()} className="w-full py-5 bg-white text-black rounded-2xl font-bold text-[10px] uppercase tracking-widest hover:bg-orange-600 hover:text-white transition-all shadow-xl">refresh system status</button>
+                </div>
+             </div>
+          )}
         </div>
       </div>
 
@@ -368,11 +358,11 @@ export default function MemberAIAssistant() {
              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-[2.5rem] p-10 w-full max-w-sm shadow-2xl text-center border border-slate-100">
                 <div className="w-16 h-16 bg-orange-100 rounded-2xl flex items-center justify-center mx-auto mb-6 text-orange-600 shadow-inner"><Dumbbell className="w-8 h-8" /></div>
                 <h3 className="text-2xl font-black italic text-slate-900 uppercase leading-none mb-2">new workout</h3>
-                <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-10 px-4 leading-relaxed">name your current routine</p>
-                <input autoFocus value={newSessionTitle} onChange={(e) => setNewSessionTitle(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleCreateSession()} placeholder="e.g. fat loss plan" className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4 font-bold text-sm focus:border-orange-500 outline-none mb-8 transition-all" />
+                <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-10 px-4 leading-relaxed">name your current physical objective or routine</p>
+                <input autoFocus value={newSessionTitle} onChange={(e) => setNewSessionTitle(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleCreateSession()} placeholder="e.g. fat loss plan / leg day" className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4 font-bold text-sm focus:border-orange-500 outline-none mb-8 transition-all" />
                 <div className="flex gap-3">
                   <button onClick={() => {setIsNewSessionModalOpen(false); if(sessions.length === 0) navigate('/member');}} className="flex-1 py-4 bg-slate-100 text-slate-400 rounded-2xl font-black uppercase text-[10px]">Cancel</button>
-                  <button onClick={handleCreateSession} className="flex-1 py-4 bg-orange-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg">Initialize</button>
+                  <button onClick={handleCreateSession} className="flex-1 py-4 bg-orange-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg shadow-orange-500/30">Initialize</button>
                 </div>
              </motion.div>
           </div>
@@ -384,13 +374,13 @@ export default function MemberAIAssistant() {
         {isDrawerOpen && (
           <div className="fixed inset-0 z-[200] lg:hidden">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsDrawerOpen(false)} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-            <motion.div initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }} className="absolute inset-y-0 left-0 w-80 bg-white p-6 shadow-2xl flex flex-col rounded-r-[3rem] border-r border-slate-100">
+            <motion.div initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }} className="absolute inset-y-0 left-0 w-80 bg-white p-6 shadow-2xl flex flex-col rounded-r-[3rem] border-r border-slate-100 overflow-y-auto">
               <div className="flex justify-between items-center mb-8 pr-2">
                  <h2 className="text-2xl font-black italic text-slate-900 uppercase tracking-tighter">workouts</h2>
                  <button onClick={() => setIsDrawerOpen(false)} className="p-2 bg-slate-100 rounded-full"><X className="w-5" /></button>
               </div>
               <button onClick={() => {setIsNewSessionModalOpen(true); setIsDrawerOpen(false);}} className="w-full py-5 bg-orange-600 text-white rounded-2xl font-black italic uppercase text-[11px] mb-8 shadow-lg">start new workout</button>
-              <div className="flex-1 overflow-y-auto space-y-4 no-scrollbar">
+              <div className="flex-1 space-y-4 pr-1">
                 {sessions.map(s => (
                    <div key={s.id} className="relative group">
                     <button onClick={() => switchSession(s.id)} className={`w-full text-left p-5 rounded-2xl transition-all border ${currentSid === s.id ? 'bg-orange-50 border-orange-200 text-orange-600 shadow-md' : 'bg-slate-50 border-transparent'}`}>
@@ -419,8 +409,9 @@ export default function MemberAIAssistant() {
                         </div>
                         <div className="p-6 bg-orange-50 rounded-3xl border-2 border-orange-100 relative overflow-hidden">
                             <Zap className="w-16 h-16 text-orange-600 opacity-5 absolute -right-4 -top-4 rotate-12" />
-                            <h4 className="text-[10px] font-black text-orange-600 mb-2 uppercase tracking-widest italic">ai coaching tip</h4>
-                            <p className="text-[12px] text-orange-800 font-bold leading-relaxed italic relative z-10 text-center">ai coaching tip: for 100% accurate coaching, prioritize pdfs or manual paste. jpg/png images are supported but may have limited scan precision.</p><br />"You can now ask questions in English or Sinhala (සිංහල). For 100% accuracy, prioritize uploading workout PDFs."
+                            <h4 className="text-[10px] font-black text-orange-600 mb-2 uppercase tracking-widest italic text-center">ai coaching tip</h4>
+                            <p className="text-[12px] text-orange-800 font-bold leading-relaxed italic relative z-10 text-center">ai coaching tip: for 100% accurate coaching, prioritize pdfs or manual paste. jpg/png images are supported but may have limited scan precision.</p><br />
+                            <p className="text-[12px] text-orange-800 font-bold leading-relaxed italic text-center">You can now ask questions in English or Sinhala (සිංහල).</p>
                         </div>
                         <div className="p-6 bg-slate-900 rounded-3xl text-white relative overflow-hidden shadow-lg border border-white/5">
                             <p className="text-[12px] font-medium leading-relaxed italic z-10 relative">each session is capped at {usageInfo.sessionMax} messages to maintain neural accuracy. start a new workout chat once a routine is perfected.</p>
