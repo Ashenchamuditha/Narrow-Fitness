@@ -7,15 +7,92 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const pdfParser = require('pdf-parse'); 
 const mammoth = require('mammoth'); 
+const { createWorker } = require('tesseract.js'); // Updated Tesseract import
 
 const aiRouter = Router();
-
-// --- 1. CONFIGURATION ---
 const storage = multer.memoryStorage();
 const upload = multer({ 
   storage: storage, 
-  limits: { fileSize: 15 * 1024 * 1024 } 
+  limits: { fileSize: 10 * 1024 * 1024 } 
 });
+
+// --- MEDIA PROCESSING ROUTE ---
+aiRouter.post("/process-media", upload.single('file'), async (req: any, res: Response) => {
+  if (!req.file) return res.status(400).json({ message: "no file uploaded" });
+
+  const mimeType = req.file.mimetype;
+  const fileName = req.file.originalname;
+
+  try {
+    let extractedText = "";
+
+    // A. Handle PDF - The "Ultimate" Fix
+    if (mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
+      console.log(`📄 processing workout pdf: ${fileName}`);
+      
+      // Try multiple access patterns to find the function
+      let parseFunc = pdfParser;
+      if (typeof pdfParser !== 'function' && pdfParser.default) parseFunc = pdfParser.default;
+      
+      try {
+        const data = await parseFunc(req.file.buffer);
+        extractedText = data.text;
+      } catch (e) {
+        // Final fallback for Vercel
+        const altPdf = require('pdf-parse/lib/pdf-parse.js');
+        const data = await altPdf(req.file.buffer);
+        extractedText = data.text;
+      }
+    } 
+
+    // B. Handle Word (.docx)
+    else if (mimeType.includes('officedocument') || fileName.toLowerCase().endsWith('.docx')) {
+      console.log(`📝 processing workout word doc: ${fileName}`);
+      const result = await mammoth.extractRawText({ buffer: req.file.buffer });
+      extractedText = result.value;
+    }
+
+    // C. Handle Images (OCR) - FIXED TO PREVENT NAPI-RS CRASH
+    else if (mimeType.startsWith('image/')) {
+      console.log(`📸 processing workout image: ${fileName}`);
+      const worker = await createWorker('eng');
+      const ret = await worker.recognize(req.file.buffer);
+      extractedText = ret.data.text;
+      await worker.terminate();
+    }
+
+    // D. Handle Voice (Whisper)
+    else if (mimeType.startsWith('audio/') || fileName.endsWith('.webm')) {
+      const formData = new FormData();
+      const audioFile = new Blob([req.file.buffer], { type: mimeType });
+      formData.append('file', audioFile, fileName);
+      formData.append('model', 'whisper-large-v3');
+
+      const whisperRes = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${process.env.GROQ_API_KEY}` },
+        body: formData
+      });
+      const whisperData: any = await whisperRes.json();
+      extractedText = whisperData.text || "";
+    }
+
+    if (!extractedText || extractedText.trim().length === 0) {
+      throw new Error("no readable text found.");
+    }
+
+    res.json({ 
+      text: extractedText.trim(), 
+      fileName: fileName,
+      type: mimeType.startsWith('audio') ? 'voice' : 'file'
+    });
+
+  } catch (err: any) {
+    console.error("❌ Media Processing Error:", err.message);
+    res.status(500).json({ message: "extraction failed: " + err.message });
+  }
+});
+
 
 // --- 2. SESSION MANAGEMENT ---
 
