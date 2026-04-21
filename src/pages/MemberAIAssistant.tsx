@@ -1,322 +1,436 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, memo } from 'react';
 import MemberLayout from '../components/MemberLayout';
 import { 
-  Bot, Send, User, Sparkles, Dumbbell, Utensils, 
-  ShieldCheck, Zap, Lock, RefreshCw, Info, X, Target, Activity, Crown, ArrowRight, AlertTriangle, Timer
+  Bot, Send, User, Dumbbell, Utensils, ShieldCheck, Zap, Lock, 
+  RefreshCw, Info, X, Target, Activity, Crown, ArrowRight, Timer, Mic, 
+  Paperclip, ChevronDown, MessageSquare, Plus, FileText, Image as ImageIcon, Trash2, Menu, CheckCircle2, PlayCircle
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+// --- TYPES ---
+interface Suggestion { text: string; icon: React.ElementType; }
+interface Attachment { name: string; type: string; extractedText: string; icon: React.ElementType; }
+
+// --- MEMOIZED MESSAGE LIST (Eliminates Typing Latency) ---
+const ChatMessages = memo(({ messages }: { messages: any[] }) => (
+  <div className="space-y-10 pb-10">
+    {messages.map((msg) => (
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} items-end gap-3`}>
+        {msg.role === 'model' && (
+          <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center shrink-0 border border-orange-200 shadow-sm mb-1">
+            <Bot className="w-5 text-orange-600" />
+          </div>
+        )}
+        <div className={`max-w-[92%] lg:max-w-[80%] p-6 rounded-[2rem] text-sm leading-relaxed shadow-sm relative ${
+          msg.role === 'user' ? 'bg-slate-900 text-white rounded-br-none border border-slate-800' : 'bg-white text-slate-800 rounded-tl-none border border-slate-100'
+        }`}>
+          {msg.inputType === 'file' && (
+            <div className="flex items-center gap-2 mb-4 pb-2 border-b border-orange-500/10 text-orange-400 text-[10px] font-black italic">
+              <FileText className="w-3" /> analyzing workout: {msg.fileName}
+            </div>
+          )}
+          
+          <div className="prose prose-slate max-w-none font-sans overflow-x-auto leading-relaxed">
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={{
+                table: (p) => <div className="my-6 overflow-x-auto rounded-2xl border border-slate-200 shadow-md"><table className="min-w-full divide-y divide-slate-100 bg-white" {...p} /></div>,
+                thead: (p) => <thead className="bg-slate-900 text-white" {...p} />,
+                th: (p) => <th className="px-4 py-4 text-left text-[10px] font-black uppercase tracking-widest" {...p} />,
+                td: (p) => <td className="px-4 py-4 text-[11px] font-bold text-slate-600 border-t border-slate-50" {...p} />,
+                tr: (p) => <tr className="even:bg-slate-50/80 hover:bg-orange-50/50 transition-colors" {...p} />,
+                strong: (p) => <strong className="text-orange-600 font-bold" {...p} />,
+                a: ({ href, children }) => {
+                  const isYoutube = href?.includes('youtube.com');
+                  return (
+                    <a href={href} target="_blank" rel="noopener noreferrer" className={isYoutube ? "inline-flex items-center gap-2 bg-slate-900 text-white px-5 py-3 rounded-2xl text-[10px] font-black uppercase mt-2 border border-orange-500/30 hover:bg-orange-600 transition-all shadow-lg" : "text-orange-600 font-bold underline"}>
+                      {isYoutube && <PlayCircle className="w-4 h-4 text-orange-500" />} {children}
+                    </a>
+                  );
+                }
+            }}>{msg.text}</ReactMarkdown>
+          </div>
+
+          <div className={`text-[8px] mt-4 opacity-30 font-black uppercase flex items-center gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+             <span className={msg.role === 'model' ? 'text-orange-600' : ''}>{msg.role === 'user' ? 'athlete' : 'coach'}</span>
+             <span className="w-1 h-1 bg-slate-300 rounded-full" />
+             <span>{new Date(msg.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+          </div>
+        </div>
+        {msg.role === 'user' && (
+             <div className="w-9 h-9 rounded-xl bg-slate-900 flex items-center justify-center shrink-0 border border-slate-700 shadow-sm mb-1">
+                <User className="w-5 text-white" />
+             </div>
+          )}
+      </motion.div>
+    ))}
+  </div>
+));
+
 export default function MemberAIAssistant() {
-  // --- STATES ---
+  const navigate = useNavigate();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+
+  // --- 1. STATES ---
+  const [user, setUser] = useState<any>(null);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [currentSid, setCurrentSid] = useState<number | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const [isProcessingMedia, setIsProcessingMedia] = useState(false);
+  const [attachedFiles, setAttachedFiles] = useState<Attachment[]>([]);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
+  
+  const [isNewSessionModalOpen, setIsNewSessionModalOpen] = useState(false);
+  const [newSessionTitle, setNewSessionTitle] = useState('');
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isInfoOpen, setIsInfoOpen] = useState(false);
   const [limitReached, setLimitReached] = useState(false);
   const [lockMessage, setLockMessage] = useState(''); 
-  const [usageInfo, setUsageInfo] = useState({ current: 0, max: 5 });
-  const [isInfoOpen, setIsInfoOpen] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [usageInfo, setUsageInfo] = useState({ current: 0, max: 10, sessionMax: 30 });
+  const [isListening, setIsListening] = useState(false);
 
-  const suggestions = [
-    { text: "Give me a workout table", icon: Dumbbell },
-    { text: "Show a high protein diet", icon: Utensils },
-    { text: "How to improve my form?", icon: Info },
-    { text: "Recovery tips", icon: Zap }
-  ];
-
-  // --- 1. INITIAL LOAD & HISTORY FETCH (The Loop Detector) ---
-  useEffect(() => {
-    const storedUser = localStorage.getItem('narrow_fitness_user');
-    if (storedUser) {
-      const parsedUser = JSON.parse(storedUser);
-      setUser(parsedUser);
-      const firstName = parsedUser.name.split(' ')[0];
-
-      // Fetch Chat History and Usage Status from Database
-      fetch(`/api/member/ai/history/${parsedUser.id}`)
-        .then(res => res.json())
-        .then(data => {
-          // A. Load Messages from the 'messages' array
-          if (data.messages && data.messages.length > 0) {
-            setMessages(data.messages.map((m: any) => ({
-              role: m.role,
-              text: m.message,
-              id: m.id || `hist-${Math.random()}`
-            })));
-          } else {
-            setMessages([{
-              role: 'model',
-              text: `Hi ${firstName}! 🔥 I'm your Narrow AI Coach. Ask me for a **workout table** or **diet plan** to get started!`,
-              id: 'welcome'
-            }]);
-          }
-
-          // B. HANDLE LOOP / UNBLOCK LOGIC
-          if (data.usage) {
-            const isPremiumUser = parsedUser.subscription_status === 'active' || parsedUser.role === 'admin' || parsedUser.role === 'trainer';
-            const limit = isPremiumUser ? 100 : 5;
-            
-            // Check time difference
-            const lastMsgTime = new Date(data.usage.last_message_at).getTime();
-            const msPassed = Date.now() - lastMsgTime;
-            const hoursPassed = msPassed / (1000 * 60 * 60);
-
-            // If usage >= limit AND it has been less than 2 hours
-            if (!isPremiumUser && data.usage.daily_count >= limit && hoursPassed < 2) {
-              setLimitReached(true);
-              const unlockDate = new Date(lastMsgTime + (2 * 60 * 60 * 1000));
-              const timeStr = unlockDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-              setLockMessage(`Daily free limit reached. Chat will unblock at ${timeStr}.`);
-            } else {
-              // COOLDOWN OVER OR UNDER LIMIT -> UNBLOCK
-              setLimitReached(false);
-              setLockMessage('');
-            }
-            
-            // Sync usage counter in the info hub
-            setUsageInfo({ current: data.usage.daily_count, max: limit });
-          }
-        })
-        .catch(err => console.error("History fetch error:", err));
-    }
-  }, []);
+  // --- 2. FUNCTIONS (Hoisted/Declared before Use) ---
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    setShowScrollBtn(false);
   };
-  useEffect(scrollToBottom, [messages, isLoading, limitReached]);
 
-  // --- 2. SEND MESSAGE HANDLER ---
-  const handleSendMessage = async (textOverride?: string) => {
-    const messageText = textOverride || input;
-    if (!messageText.trim() || isLoading || limitReached) return;
-    if (!user?.id) return;
+  const handleScroll = () => {
+    if (chatContainerRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
+      setShowScrollBtn(scrollHeight - scrollTop - clientHeight > 300);
+    }
+  };
 
-    const timestamp = Date.now();
-    setMessages(prev => [...prev, { role: 'user', text: messageText, id: `u-${timestamp}` }]);
+  const switchSession = (sid: number) => {
+    setCurrentSid(sid);
+    setIsDrawerOpen(false);
+    fetch(`/api/member/ai/history/${sid}`)
+      .then(r => r.json())
+      .then(data => {
+        setMessages(data.messages.map((m: any) => ({
+          role: m.role, text: m.message, id: m.id, inputType: m.input_type, fileName: m.file_name, createdAt: m.created_at
+        })));
+        setTimeout(scrollToBottom, 100);
+      });
+  };
+
+  const loadSessions = async (uid: number) => {
+    const res = await fetch(`/api/member/ai/sessions/${uid}`);
+    const data = await res.json();
+    setSessions(data);
+    if (data.length > 0) switchSession(data[0].id);
+    else setIsNewSessionModalOpen(true);
+  };
+
+  const handleCreateSession = async () => {
+    if (!newSessionTitle.trim()) return;
+    try {
+      const res = await fetch('/api/member/ai/sessions/new', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ userId: user.id, title: newSessionTitle })
+      });
+      const newS = await res.json();
+      setSessions(prev => [newS, ...prev]);
+      setNewSessionTitle('');
+      setIsNewSessionModalOpen(false);
+      switchSession(newS.id);
+    } catch (err) { console.error("Session creation failed"); }
+  };
+
+  const deleteSession = async (e: React.MouseEvent, sid: number) => {
+    e.stopPropagation();
+    if (!window.confirm("are you sure you want to delete?")) return;
+    const res = await fetch(`/api/member/ai/sessions/${sid}`, { method: 'DELETE' });
+    if (res.ok) {
+        const filtered = sessions.filter(s => s.id !== sid);
+        setSessions(filtered);
+        if (currentSid === sid && filtered.length > 0) switchSession(filtered[0].id);
+        else if (filtered.length === 0) window.location.reload();
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if ((!input.trim() && attachedFiles.length === 0) || isLoading || limitReached) return;
+
+    const currentInputType = attachedFiles.length > 0 ? 'file' : 'text';
+    const currentFileName = attachedFiles.length > 0 ? attachedFiles[0].name : null;
+    let finalMessage = input;
+    if (attachedFiles.length > 0) {
+        finalMessage += `\n\nATTACHED WORKOUT CONTEXT:\n` + attachedFiles.map(f => f.extractedText).join("\n");
+    }
+    
+    // Add user message to state immediately
+    const userMsgId = Date.now();
+    setMessages(prev => [...prev, { role: 'user', text: input || "analyzing attachments...", id: userMsgId, createdAt: new Date() }]);
+    
     setInput('');
+    setAttachedFiles([]);
     setIsLoading(true);
+    setTimeout(scrollToBottom, 50);
 
     try {
       const res = await fetch('/api/member/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, message: messageText })
+        body: JSON.stringify({ 
+            userId: user.id, 
+            message: finalMessage, 
+            sessionId: currentSid, 
+            inputType: currentInputType, 
+            fileName: currentFileName 
+        })
       });
-
       const data = await res.json();
-
-      if (res.status === 403) {
-        // --- LOGIC: LIMIT REACHED (Backend triggers this if under 2 hours) ---
-        setLimitReached(true);
-        setLockMessage(data.message); 
+      
+      if (res.ok) {
+        // --- FIXED: UPDATE STATE IMMEDIATELY WITH AI RESPONSE ---
         setMessages(prev => [...prev, { 
-          role: 'model', 
-          text: `🚨 **Access Paused**\n\n${data.message}\n\n[UPGRADE TO PRO FOR UNLIMITED ACCESS](/member/payments)`, 
-          id: `limit-${timestamp}` 
+            role: 'model', 
+            text: data.text, 
+            id: Date.now() + 1, 
+            createdAt: new Date(),
+            inputType: 'text' 
         }]);
-        if (data.usage) setUsageInfo({ current: data.usage.current, max: data.usage.max });
-      } else if (res.ok) {
-        // --- SUCCESS: RESET OR INCREMENT ---
-        setMessages(prev => [...prev, { role: 'model', text: data.text, id: `ai-${timestamp}` }]);
+
+        // Dynamically update limits based on user package
+        const pkg = (user.package_name || '').toLowerCase();
+        let maxDaily = 10; let maxSession = 30;
+        if (user.role === 'admin') maxDaily = 100;
+        else if (pkg.includes('pro')) { maxDaily = 20; maxSession = 50; }
+        else if (pkg.includes('personal') || pkg.includes('elite')) { maxDaily = 35; maxSession = 50; }
         
-        // Update usage count live from the backend's new count
-        if (data.usage) {
-          setUsageInfo({ current: data.usage.current, max: data.usage.max });
-          // If the backend reset the count to 1 after 2 hours, we stay unlocked
-          setLimitReached(false);
-        }
-      } else {
-        throw new Error(data.message);
+        setUsageInfo({ current: data.usage.current, max: maxDaily, sessionMax: maxSession });
+      } else if (res.status === 403 || res.status === 422) {
+        setLimitReached(true); 
+        setLockMessage(data.message);
       }
-    } catch (error: any) {
-      setMessages(prev => [...prev, { role: 'model', text: "Connection error. Please try again.", id: `fail-${timestamp}` }]);
-    } finally {
-      setIsLoading(false);
+    } catch (error) {
+        console.error("AI Link Failure");
+    } finally { 
+        setIsLoading(false); 
+        setTimeout(scrollToBottom, 150); 
     }
   };
 
-  const isPremium = user?.subscription_status === 'active' || user?.role === 'admin' || user?.role === 'trainer';
+  const handleFileUpload = async (e: any) => {
+    const file = e.target.files[0]; if (!file) return;
+    setIsProcessingMedia(true);
+    const formData = new FormData(); formData.append('file', file);
+    try {
+        const res = await fetch('/api/member/ai/process-media', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (res.ok) setAttachedFiles(prev => [...prev, { name: file.name, type: data.type, extractedText: data.text, icon: file.type.includes('pdf') ? FileText : ImageIcon }]);
+    } finally { setIsProcessingMedia(false); e.target.value = ''; }
+  };
+
+  const toggleVoice = () => {
+  const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+  if (!SpeechRecognition) return alert("voice not supported");
+  
+  const rec = new SpeechRecognition();
+  
+  // ✅ THE FIX: Set language to detect both or default to Sinhala
+  // 'si-LK' is the code for Sinhala (Sri Lanka)
+  rec.lang = 'si-LK'; 
+
+  if (!isListening) {
+    rec.start(); 
+    setIsListening(true);
+    rec.onresult = (e: any) => { 
+      setInput(prev => prev + " " + e.results[0][0].transcript); 
+      setIsListening(false); 
+    };
+    rec.onerror = () => setIsListening(false);
+    rec.onend = () => setIsListening(false);
+  }
+};
+
+  // --- 3. EFFECTS ---
+  useEffect(() => {
+    const stored = localStorage.getItem('narrow_fitness_user');
+    if (!stored) {
+      navigate('/auth');
+      return;
+    }
+    const parsed = JSON.parse(stored);
+    setUser(parsed);
+    loadSessions(parsed.id);
+  }, [navigate]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages.length, isLoading]);
+
+  if (!user) return null;
 
   return (
     <MemberLayout>
-      {/* --- INFO POPUP MODAL --- */}
+      <div className="flex h-[calc(100vh-7rem)] max-w-6xl mx-auto w-full gap-6 px-2 lg:px-4">
+        
+        {/* --- DESKTOP SIDEBAR --- */}
+        <div className="hidden lg:flex flex-col w-72 bg-white rounded-[2.5rem] border border-slate-100 p-6 shadow-xl">
+           <button onClick={() => setIsNewSessionModalOpen(true)} className="w-full py-4 bg-black text-white rounded-2xl font-black italic text-[11px] mb-6 flex items-center justify-center gap-2 hover:bg-orange-600 transition-all shadow-lg">
+             <Plus className="w-4 h-4" /> new workout chat
+           </button>
+           <div className="flex-1 overflow-y-auto space-y-3 no-scrollbar pr-1">
+              {sessions.map(s => (
+                <div key={s.id} className="relative group">
+                    <button onClick={() => switchSession(s.id)} className={`w-full text-left p-5 rounded-2xl transition-all border ${currentSid === s.id ? 'bg-orange-50 border-orange-200 text-orange-600 shadow-md' : 'bg-slate-50 border-transparent text-slate-400 hover:bg-slate-100'}`}>
+                        <p className="text-[11px] font-black italic truncate leading-none pr-6">"{s.title}"</p>
+                        <p className="text-[8px] font-bold mt-2 opacity-50 uppercase tracking-widest">{new Date(s.created_at).toLocaleDateString()}</p>
+                    </button>
+                    <button onClick={(e) => deleteSession(e, s.id)} className="absolute right-4 top-5 p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-3.5 h-3.5" /></button>
+                </div>
+              ))}
+           </div>
+        </div>
+
+        {/* --- MAIN CHAT UI --- */}
+        <div className="flex-1 flex flex-col bg-white rounded-[2.5rem] border border-slate-100 shadow-2xl overflow-hidden relative">
+          
+          <div className="px-5 py-4 border-b border-slate-50 flex justify-between items-center bg-white/95 backdrop-blur-md z-20 shadow-sm">
+            <div className="flex items-center gap-3">
+              <button onClick={() => setIsDrawerOpen(true)} className="lg:hidden p-2.5 bg-slate-50 text-slate-900 rounded-xl"><Menu className="w-5" /></button>
+              <div className="w-10 h-10 bg-orange-600 rounded-xl flex items-center justify-center shadow-lg"><Bot className="text-white w-6" /></div>
+              <div>
+                 <h3 className="text-lg font-black italic text-slate-900 leading-none">ai coach</h3>
+                 <span className="text-[8px] font-black text-green-500 uppercase tracking-widest mt-1 block">link active</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+                <button onClick={() => setIsNewSessionModalOpen(true)} className="p-2.5 bg-slate-900 text-white rounded-xl hover:bg-orange-600 transition-all shadow-md">
+                    <Plus className="w-5" />
+                </button>
+                <button onClick={() => setIsInfoOpen(true)} className="p-2.5 bg-slate-50 text-slate-400 rounded-xl hover:bg-orange-600 hover:text-white transition-all shadow-sm"><Info className="w-5" /></button>
+            </div>
+          </div>
+
+          <div ref={chatContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 lg:px-16 space-y-10 no-scrollbar bg-[#fcfcfc]">
+            <ChatMessages messages={messages} />
+            {(isLoading || isProcessingMedia) && (
+              <div className="flex justify-start items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center border border-orange-100"><RefreshCw className="w-4 text-orange-600 animate-spin" /></div>
+                <div className="text-[10px] font-bold text-orange-500 animate-pulse">processing protocols...</div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          <AnimatePresence>
+            {showScrollBtn && (
+                <motion.button initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} onClick={scrollToBottom} className="absolute bottom-40 right-8 p-3 bg-black text-white rounded-full shadow-2xl z-30 hover:bg-orange-600">
+                    <ChevronDown className="w-6" />
+                </motion.button>
+            )}
+          </AnimatePresence>
+
+          <div className="px-3 lg:px-12 pb-6 lg:pb-8 pt-4 bg-white border-t border-slate-50">
+            {attachedFiles.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-4">
+                    {attachedFiles.map((file, idx) => (
+                        <div key={idx} className="flex items-center gap-2 px-3 py-2 bg-slate-900 text-white rounded-xl shadow-lg border border-white/10">
+                            <file.icon className="w-4 text-orange-500" />
+                            <span className="text-[9px] font-bold truncate max-w-[100px]">{file.name}</span>
+                            <button onClick={() => setAttachedFiles(f => f.filter((_, i) => i !== idx))} className="text-orange-600 p-0.5"><X className="w-3.5" /></button>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            <div className="flex items-center gap-2 lg:gap-3 max-w-5xl mx-auto">
+              <label className="p-3.5 lg:p-4 bg-slate-100 text-slate-400 rounded-2xl hover:bg-slate-200 cursor-pointer transition-all shrink-0">
+                  {isProcessingMedia ? <RefreshCw className="w-5 animate-spin text-orange-600" /> : <Paperclip className="w-5" />}
+                  <input type="file" onChange={handleFileUpload} className="hidden" accept=".pdf,.docx,.png,.jpg,.jpeg" />
+              </label>
+              
+              <div className="flex-1 flex items-center gap-2 bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] px-2 focus-within:border-orange-500 transition-all shadow-sm overflow-hidden">
+                  <input value={input} disabled={limitReached || isLoading} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()} placeholder="message coach..." className="flex-1 bg-transparent py-4 px-3 outline-none font-medium text-sm min-w-0" />
+                  <button onClick={handleSendMessage} disabled={isLoading || (!input.trim() && attachedFiles.length === 0) || limitReached} className="p-2.5 bg-black text-white rounded-xl hover:bg-orange-600 transition-all shrink-0 shadow-lg"><Send className="w-5" /></button>
+              </div>
+              
+              <button onClick={toggleVoice} disabled={limitReached} className={`p-3.5 lg:p-4 rounded-2xl transition-all shrink-0 ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-900 text-white hover:bg-orange-600'}`}><Mic className="w-5" /></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* MODAL: NEW SESSION */}
       <AnimatePresence>
-        {isInfoOpen && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-[2.5rem] shadow-2xl max-w-sm w-full p-8 relative overflow-hidden">
-              <button onClick={() => setIsInfoOpen(false)} className="absolute top-6 right-6 p-2 bg-slate-100 rounded-full hover:bg-red-50 transition-all"><X className="w-4 h-4" /></button>
-              <h2 className="text-2xl font-black uppercase italic tracking-tighter mb-6 text-slate-900">Coach Hub</h2>
-              <div className="space-y-4">
-                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                   <p className="text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Athlete Goal</p>
-                   <p className="text-sm font-bold text-slate-700 uppercase tracking-tight">{user?.primary_goal || 'General Fitness'}</p>
-                 </div>
-                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                   <p className="text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">Session Usage</p>
-                   <p className="text-sm font-bold text-slate-700 uppercase">{isPremium ? 'Unlimited Pro Access' : `${usageInfo.current} / ${usageInfo.max} Messages`}</p>
-                 </div>
-                 <div className="p-5 bg-slate-900 rounded-2xl text-white relative overflow-hidden">
-                    <p className="text-[11px] font-medium leading-relaxed relative z-10 italic">
-                      "I analyze your biometrics to generate precise schedules. Upgrade to Pro for 100+ daily sessions."
-                    </p>
-                    <ShieldCheck className="absolute -bottom-4 -right-4 w-16 h-16 text-white/10 rotate-12" />
-                 </div>
+        {isNewSessionModalOpen && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm">
+             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-[2.5rem] p-10 w-full max-w-sm shadow-2xl text-center border border-slate-100">
+                <div className="w-16 h-16 bg-orange-100 rounded-2xl flex items-center justify-center mx-auto mb-6 text-orange-600 shadow-inner"><Dumbbell className="w-8 h-8" /></div>
+                <h3 className="text-2xl font-black italic text-slate-900 uppercase leading-none mb-2">new workout</h3>
+                <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-10 px-4 leading-relaxed">name your current routine</p>
+                <input autoFocus value={newSessionTitle} onChange={(e) => setNewSessionTitle(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleCreateSession()} placeholder="e.g. fat loss plan" className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4 font-bold text-sm focus:border-orange-500 outline-none mb-8 transition-all" />
+                <div className="flex gap-3">
+                  <button onClick={() => {setIsNewSessionModalOpen(false); if(sessions.length === 0) navigate('/member');}} className="flex-1 py-4 bg-slate-100 text-slate-400 rounded-2xl font-black uppercase text-[10px]">Cancel</button>
+                  <button onClick={handleCreateSession} className="flex-1 py-4 bg-orange-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg">Initialize</button>
+                </div>
+             </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MOBILE DRAWER */}
+      <AnimatePresence>
+        {isDrawerOpen && (
+          <div className="fixed inset-0 z-[200] lg:hidden">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsDrawerOpen(false)} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+            <motion.div initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }} className="absolute inset-y-0 left-0 w-80 bg-white p-6 shadow-2xl flex flex-col rounded-r-[3rem] border-r border-slate-100">
+              <div className="flex justify-between items-center mb-8 pr-2">
+                 <h2 className="text-2xl font-black italic text-slate-900 uppercase tracking-tighter">workouts</h2>
+                 <button onClick={() => setIsDrawerOpen(false)} className="p-2 bg-slate-100 rounded-full"><X className="w-5" /></button>
+              </div>
+              <button onClick={() => {setIsNewSessionModalOpen(true); setIsDrawerOpen(false);}} className="w-full py-5 bg-orange-600 text-white rounded-2xl font-black italic uppercase text-[11px] mb-8 shadow-lg">start new workout</button>
+              <div className="flex-1 overflow-y-auto space-y-4 no-scrollbar">
+                {sessions.map(s => (
+                   <div key={s.id} className="relative group">
+                    <button onClick={() => switchSession(s.id)} className={`w-full text-left p-5 rounded-2xl transition-all border ${currentSid === s.id ? 'bg-orange-50 border-orange-200 text-orange-600 shadow-md' : 'bg-slate-50 border-transparent'}`}>
+                        <p className="text-xs font-black italic truncate leading-none pr-6">"{s.title}"</p>
+                    </button>
+                    <button onClick={(e) => deleteSession(e, s.id)} className="absolute right-4 top-5 p-2 text-slate-300 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                   </div>
+                ))}
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      <div className="h-[calc(100vh-11rem)] w-full flex flex-col bg-white rounded-[2.5rem] border border-slate-100 shadow-2xl overflow-hidden relative">
-        
-        {/* Header Bar */}
-        <div className="px-8 py-3 border-b border-slate-100 flex justify-between items-center bg-white/80 backdrop-blur-md sticky top-0 z-10">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-orange-600 rounded-xl flex items-center justify-center shadow-lg shadow-orange-100">
-              <Bot className="text-white w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="text-xl font-black uppercase italic tracking-tighter leading-none text-slate-900">Narrow AI Assistant</h3>
-              <div className="flex items-center gap-1.5 mt-1">
-                <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${limitReached ? 'bg-red-50 shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]'}`}></span>
-                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{limitReached ? 'Session Paused' : 'Neural Link Active'}</span>
-              </div>
-            </div>
-          </div>
-          <button onClick={() => setIsInfoOpen(true)} className="p-2.5 bg-slate-100 text-slate-900 rounded-xl hover:bg-orange-600 hover:text-white transition-all shadow-sm">
-            <Info className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* --- SCROLLABLE CHAT AREA --- */}
-        <div className="flex-1 overflow-y-auto p-6 lg:px-32 lg:py-12 space-y-10 no-scrollbar bg-[#fdfdfd]">
-          {messages.map((msg) => (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} items-end gap-4`}>
-              
-              {msg.role === 'model' && (
-                <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center shrink-0 mb-1 border border-orange-200">
-                  <Bot className="w-6 h-6 text-orange-600" />
-                </div>
-              )}
-
-              <div className={`max-w-[95%] lg:max-w-[85%] p-7 rounded-[2rem] text-sm md:text-base leading-[1.7] shadow-sm font-medium ${
-                msg.role === 'user' 
-                ? 'bg-slate-900 text-white rounded-br-none tracking-tight' 
-                : 'bg-white text-slate-800 rounded-tl-none border border-slate-200'
-              }`}>
-                <div className="overflow-x-auto font-sans prose prose-slate max-w-none">
-                  <ReactMarkdown 
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      table: ({node, ...props}) => <div className="my-4 overflow-x-auto rounded-xl border border-slate-200 shadow-sm"><table className="min-w-full divide-y divide-slate-200 bg-white" {...props} /></div>,
-                      thead: ({node, ...props}) => <thead className="bg-slate-900 text-white" {...props} />,
-                      th: ({node, ...props}) => <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-widest" {...props} />,
-                      td: ({node, ...props}) => <td className="px-4 py-3 text-xs border-t border-slate-100 font-bold text-slate-600" {...props} />,
-                      tr: ({node, ...props}) => <tr className="even:bg-slate-50 hover:bg-orange-50/50 transition-colors" {...props} />,
-                      p: ({node, ...props}) => <p className="mb-4 last:mb-0" {...props} />,
-                      strong: ({node, ...props}) => <strong className="font-black text-orange-600" {...props} />,
-                      a: ({node, ...props}) => <Link to={props.href || ''} className="inline-flex items-center gap-2 bg-orange-600 text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase mt-4 hover:bg-black transition-all shadow-lg shadow-orange-200"><Crown className="w-3.5 h-3.5"/> Upgrade to Pro Access</Link>
-                    }}
-                  >
-                    {msg.text}
-                  </ReactMarkdown>
-                </div>
-              </div>
-
-              {msg.role === 'user' && (
-                <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center shrink-0 mb-1 border border-slate-700 shadow-sm">
-                  <User className="w-5 h-5 text-white" />
-                </div>
-              )}
-            </motion.div>
-          ))}
-          
-          {/* --- UPGRADE ALERT CARD (When Limit Hit) --- */}
-          <AnimatePresence>
-            {limitReached && (
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex justify-center py-6">
-                 <div className="bg-slate-900 border-2 border-orange-500/30 rounded-[2.5rem] p-10 max-w-lg w-full shadow-2xl relative overflow-hidden text-center">
-                    <div className="relative z-10">
-                      <div className="w-20 h-20 bg-orange-600 rounded-full flex items-center justify-center mb-6 shadow-xl mx-auto">
-                        <Timer className="w-10 h-10 text-white" />
-                      </div>
-                      <h4 className="text-2xl font-black text-white uppercase italic tracking-tighter mb-2">Access Paused</h4>
-                      <p className="text-slate-400 text-sm font-medium leading-relaxed mb-10 px-4">
-                        {lockMessage}
-                      </p>
-                      <Link 
-                        to="/member/payments" 
-                        className="flex items-center gap-3 bg-white text-black px-12 py-5 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-orange-600 hover:text-white transition-all transform active:scale-95 shadow-xl"
-                      >
-                        <Crown className="w-5 h-5 text-orange-500" /> Unlock Now with Pro
-                      </Link>
+      {/* COACH HUB (INFO) */}
+      <AnimatePresence>
+        {isInfoOpen && (
+            <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+                <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="bg-white rounded-[2.5rem] p-10 max-w-md w-full relative shadow-2xl overflow-hidden">
+                    <button onClick={() => setIsInfoOpen(false)} className="absolute top-6 right-6 p-2 text-slate-300 hover:text-red-500 transition-all"><X className="w-6" /></button>
+                    <div className="flex items-center gap-3 mb-8 text-orange-600"><ShieldCheck className="w-10 h-10" /><h2 className="text-3xl font-black italic text-slate-900 leading-none">coach hub</h2></div>
+                    <div className="space-y-6">
+                        <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 shadow-sm">
+                            <div className="flex justify-between items-center mb-4"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">daily session limit:</span><span className="text-sm font-black text-orange-600 uppercase">{usageInfo.max - usageInfo.current} protocols left</span></div>
+                            <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden shadow-inner"><motion.div initial={{ width: 0 }} animate={{ width: `${(usageInfo.current / usageInfo.max) * 100}%` }} className="bg-orange-600 h-full shadow-[0_0_10px_#f97316]" /></div>
+                        </div>
+                        <div className="p-6 bg-orange-50 rounded-3xl border-2 border-orange-100 relative overflow-hidden">
+                            <Zap className="w-16 h-16 text-orange-600 opacity-5 absolute -right-4 -top-4 rotate-12" />
+                            <h4 className="text-[10px] font-black text-orange-600 mb-2 uppercase tracking-widest italic">ai coaching tip</h4>
+                            <p className="text-[12px] text-orange-800 font-bold leading-relaxed italic relative z-10 text-center">ai coaching tip: for 100% accurate coaching, prioritize pdfs or manual paste. jpg/png images are supported but may have limited scan precision.</p><br />"You can now ask questions in English or Sinhala (සිංහල). For 100% accuracy, prioritize uploading workout PDFs."
+                        </div>
+                        <div className="p-6 bg-slate-900 rounded-3xl text-white relative overflow-hidden shadow-lg border border-white/5">
+                            <p className="text-[12px] font-medium leading-relaxed italic z-10 relative">each session is capped at {usageInfo.sessionMax} messages to maintain neural accuracy. start a new workout chat once a routine is perfected.</p>
+                            <Target className="absolute -bottom-8 -right-8 w-24 h-24 text-white/5 rotate-12" />
+                        </div>
                     </div>
-                    <AlertTriangle className="absolute -bottom-10 -right-10 w-40 h-40 text-white/5 -rotate-12" />
-                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {isLoading && (
-            <div className="flex justify-start items-center gap-4">
-              <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center"><RefreshCw className="w-5 h-5 text-orange-600 animate-spin" /></div>
-              <div className="bg-white border border-slate-100 px-6 py-4 rounded-2xl shadow-sm italic font-bold text-orange-600 text-sm animate-pulse tracking-tighter">
-                Coach is preparing your elite strategy...
-              </div>
+                </motion.div>
             </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* --- FOOTER INPUT SECTION --- */}
-        <div className="px-8 pb-8 pt-4 bg-white border-t border-slate-100">
-          
-          {!limitReached && (
-            <div className="flex gap-2 overflow-x-auto no-scrollbar mb-4 px-2">
-              {suggestions.map((item, i) => (
-                <button 
-                  key={i} 
-                  disabled={isLoading}
-                  onClick={() => handleSendMessage(item.text)}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-slate-50 text-slate-500 rounded-full text-[9px] font-black uppercase border border-slate-200 hover:bg-orange-600 hover:text-white transition-all active:scale-95 whitespace-nowrap shadow-sm"
-                >
-                  <item.icon className="w-3 h-3" />
-                  {item.text}
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div className="relative group max-w-6xl mx-auto w-full">
-            <input 
-              value={input} 
-              disabled={limitReached || isLoading}
-              onChange={(e) => setInput(e.target.value)} 
-              onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-              placeholder={limitReached ? "SESSION LOCKED - UPGRADE TO CONTINUE" : "Ask your coach about schedules, meals, or form..."}
-              className={`w-full border-2 rounded-[2.5rem] py-5 pl-8 pr-20 outline-none transition-all font-bold text-sm shadow-inner ${
-                limitReached 
-                ? 'bg-red-50 border-red-100 text-red-300 cursor-not-allowed italic' 
-                : 'bg-slate-50 border-slate-100 focus:border-orange-500 focus:bg-white'
-              }`}
-            />
-            <button 
-              onClick={() => handleSendMessage()} 
-              disabled={isLoading || !input.trim() || limitReached}
-              className={`absolute right-3 top-3 bottom-3 px-8 rounded-3xl transition-all flex items-center justify-center shadow-lg ${
-                limitReached ? 'bg-slate-200 text-slate-400' : 'bg-black text-white hover:bg-orange-600'
-              }`}
-            >
-              {isLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : limitReached ? <Lock className="w-5 h-5" /> : <Send className="w-5 h-5" />}
-            </button>
-          </div>
-        </div>
-      </div>
+        )}
+      </AnimatePresence>
     </MemberLayout>
   );
 }

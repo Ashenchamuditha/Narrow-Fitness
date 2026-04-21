@@ -163,9 +163,10 @@ app.get("/api/public/stats", async (req, res) => {
 
 // --- 7. ROUTER REGISTRATION ---
 app.use("/api/admin", adminRouter);
+app.use("/api/member/ai", aiRouter);
 app.use("/api/member", memberRouter);
 app.use("/api", memberRouter);
-app.use("/api/member/ai", aiRouter);
+
 
 // --- 8. INITIALIZATION LOGIC ---
 
