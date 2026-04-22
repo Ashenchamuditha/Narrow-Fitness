@@ -151,13 +151,29 @@ aiRouter.post("/chat", async (req, res) => {
     const pkg = (userData.package_name || '').toLowerCase();
      // DEBUG: Add this to see exactly what is null in your Vercel logs
     console.log("DEBUG USER DATA:", { role: userData.role, pkg: userData.package_name });
-    // TIERED LIMITS logic
-    let DAILY_LIMIT = 10; 
-    let SESSION_MAX = 30;
-    if (userData.role === 'admin') DAILY_LIMIT = 100;
-    else if (userData.role.includes('pro')) { DAILY_LIMIT = 20; SESSION_MAX = 50; }
-    else if (userData.package_name.includes('personal') || userData.package_name.includes('elite')) { DAILY_LIMIT = 35; SESSION_MAX = 50; }
+    // --- TIERED LIMITS LOGIC (BULLETPROOF VERSION) ---
+let DAILY_LIMIT = 10; 
+let SESSION_MAX = 30;
 
+// 1. Create safe versions of these strings (convert null to "")
+const safeRole = (userData.role || "").toLowerCase();
+const safePkg = (userData.package_name || "").toLowerCase();
+
+// 2. Use the safe strings for checks
+if (safeRole === 'admin') {
+    DAILY_LIMIT = 100;
+} 
+else if (safeRole.includes('pro')) {
+    DAILY_LIMIT = 20; 
+    SESSION_MAX = 50; 
+}
+// This line was crashing before because safePkg was null. Now it is ""
+else if (safePkg.includes('personal') || safePkg.includes('elite')) { 
+    DAILY_LIMIT = 35; 
+    SESSION_MAX = 50; 
+}
+
+// Now the code will continue to the AI call instead of crashing!
     // Session Cap check
     const countRes = await query("SELECT COUNT(*) FROM chat_history WHERE session_id = $1 AND role = 'user'", [sessionId]);
     if (parseInt(countRes.rows[0].count) >= SESSION_MAX) {
