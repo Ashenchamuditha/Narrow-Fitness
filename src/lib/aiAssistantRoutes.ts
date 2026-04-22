@@ -3,9 +3,25 @@ import { query } from '../../api/index.js';
 import multer from 'multer';
 import { createRequire } from 'module';
 
-// --- STABLE LIBRARIES ---
 const require = createRequire(import.meta.url);
 const mammoth = require('mammoth'); 
+const pdfLib = require('pdf-parse'); 
+
+// --- FIXED HELPER WITH TYPES ---
+const safePdfParse = async (buffer: Buffer): Promise<any> => {
+  try {
+    // We cast to 'any' to stop the red lines on .default and .pdf
+    const lib = pdfLib as any;
+
+    if (typeof lib === 'function') return await lib(buffer);
+    if (lib.default && typeof lib.default === 'function') return await lib.default(buffer);
+    if (lib.pdf && typeof lib.pdf === 'function') return await lib.pdf(buffer);
+    
+    throw new Error("PDF parser function not found in library.");
+  } catch (err) {
+    throw err;
+  }
+};
 
 const aiRouter = Router();
 
@@ -13,290 +29,266 @@ const aiRouter = Router();
 const storage = multer.memoryStorage();
 const upload = multer({ 
   storage: storage, 
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB Limit
+  limits: { fileSize: 5 * 1024 * 1024 } // 5MB Limit for Vercel stability
 });
 
-// --- 2. SESSION MANAGEMENT ---
-
-// Get all workout sessions for the user
+// --- 2. SESSION & HISTORY ---
 aiRouter.get("/sessions/:userId", async (req, res) => {
   const uid = Number(req.params.userId);
   try {
-    const result = await query(
-      "SELECT id, title, created_at FROM chat_sessions WHERE userid = $1 ORDER BY created_at DESC",
-      [uid]
-    );
+    const result = await query("SELECT id, title, created_at FROM chat_sessions WHERE userid = $1 ORDER BY created_at DESC", [uid]);
     res.json(result.rows);
-  } catch (err) {
-    res.status(500).json({ message: "failed to load sessions" });
-  }
+  } catch (err) { res.status(500).json({ message: "failed to load sessions" }); }
 });
 
-// Create new workout session
 aiRouter.post("/sessions/new", async (req, res) => {
   const { userId, title } = req.body;
   try {
-    const result = await query(
-      "INSERT INTO chat_sessions (userid, title) VALUES ($1, $2) RETURNING *",
-      [userId, title || 'new workout chat']
-    );
+    const result = await query("INSERT INTO chat_sessions (userid, title) VALUES ($1, $2) RETURNING *", [userId, title || 'new workout chat']);
     res.status(201).json(result.rows[0]);
-  } catch (err) {
-    res.status(500).json({ message: "failed to create session" });
-  }
+  } catch (err) { res.status(500).json({ message: "failed to create session" }); }
 });
-
-// --- 3. HISTORY RETRIEVAL ---
 
 aiRouter.get("/history/:sessionId", async (req, res) => {
   const sid = Number(req.params.sessionId);
   try {
-    const result = await query(
-      `SELECT id, role, message, input_type, file_name, created_at 
-       FROM chat_history WHERE session_id = $1 
-       ORDER BY created_at ASC`, [sid]
-    );
+    const result = await query(`SELECT id, role, message, input_type, file_name, created_at FROM chat_history WHERE session_id = $1 ORDER BY created_at ASC`, [sid]);
     res.json({ messages: result.rows });
-  } catch (err) {
-    res.status(500).json({ messages: [] });
-  }
+  } catch (err) { res.status(500).json({ messages: [] }); }
 });
 
-// --- 4. MEDIA EXTRACTION ENGINE (STABLE VERSION) ---
-
+// --- 4. MEDIA EXTRACTION ENGINE (FIXED) ---
 aiRouter.post("/process-media", upload.single('file'), async (req: any, res: Response) => {
   if (!req.file) return res.status(400).json({ message: "no file uploaded" });
 
   const mimeType = req.file.mimetype;
   const fileName = req.file.originalname;
+  const apiKey = process.env.GROQ_API_KEY?.trim() || "";
 
   try {
-    let extractedText = "";
+    let rawText = "";
 
-    // A. Handle Word (.docx) - STABLE
+    // 1. Handle Word (.docx)
     if (mimeType.includes('officedocument') || fileName.toLowerCase().endsWith('.docx')) {
-      console.log(`📝 processing workout word doc: ${fileName}`);
       const result = await mammoth.extractRawText({ buffer: req.file.buffer });
-      extractedText = result.value;
+      rawText = result.value;
     }
-
-    // B. Handle Voice (Whisper via Groq) - STABLE (API based)
-    else if (mimeType.startsWith('audio/') || fileName.endsWith('.webm')) {
-      console.log(`🎙️ transcribing workout audio...`);
+    // 2. Handle PDF (Using the safe helper)
+    else if (mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
+      console.log(`📄 Parsing PDF: ${fileName}`);
+      const data = await safePdfParse(req.file.buffer);
+      rawText = data.text;
+    }
+    // 3. Handle Images (Using the STABLE llava model)
+    else if (mimeType.startsWith('image/')) {
+      console.log(`📸 Parsing Image: ${fileName}`);
+      const base64Image = req.file.buffer.toString('base64');
+      const visionRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "llava-v1.5-7b-4096", // Stable model, not decommissioned
+          messages: [{
+            role: "user",
+            content: [
+              { type: "text", text: "Read this fitness plan and extract all workout/diet text." },
+              { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Image}` } }
+            ]
+          }]
+        })
+      });
+      const visionData: any = await visionRes.json();
+      if (visionData.error) throw new Error("Vision API: " + visionData.error.message);
+      rawText = visionData.choices?.[0]?.message?.content || "";
+    }
+    //voice inputs (whisper)
+     else if (mimeType.startsWith('audio/') || fileName.endsWith('.webm')) {
       const formData = new FormData();
-      const audioFile = new Blob([req.file.buffer], { type: mimeType });
-      formData.append('file', audioFile, fileName);
+      formData.append('file', new Blob([req.file.buffer], { type: mimeType }), fileName);
       formData.append('model', 'whisper-large-v3');
+      
+      // THIS PROMPT IS THE SECRET: It forces English letters for English sounds.
+      formData.append('prompt', 'This is a fitness conversation. If you hear English words like "Hi", "How are you", "Gym", "Workout", use the English Alphabet. Only use Sinhala script (සිංහල) for actual Sinhala words.');
 
       const whisperRes = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
         method: "POST",
-        headers: { "Authorization": `Bearer ${process.env.GROQ_API_KEY}` },
+        headers: { "Authorization": `Bearer ${apiKey}` },
         body: formData
       });
       const whisperData: any = await whisperRes.json();
-      extractedText = whisperData.text || "";
-    }
+      rawText = whisperData.text || "";
 
-    // C. Disabled Formats (To prevent crashes)
-    else {
-      return res.status(400).json({ 
-        message: "This file format is temporarily disabled for server stability. Please use .docx or manual paste." 
-      });
+      // --- LOG VOICE INPUT TO TERMINAL IMMEDIATELY ---
+      const voiceTokens = Math.ceil(rawText.length / 4);
+      console.log(`🎤 VOICE INPUT: "${rawText}"`);
+      console.log(`🎫 Transcription Est. Tokens: ~${voiceTokens}`);
     }
+    // --- VALIDATION & LOGGING (Once only) ---
+    if (!rawText || rawText.trim().length === 0) throw new Error("File was empty or unreadable.");
 
-    if (!extractedText || extractedText.trim().length === 0) {
-      throw new Error("the file was read but no text could be extracted.");
-    }
+    const estTokens = Math.ceil(rawText.length / 4);
+    console.log(`📂 Attached Doc Size: ~${estTokens} tokens`);
 
-    res.json({ 
-      text: extractedText.trim(), 
-      fileName: fileName,
-      type: mimeType.startsWith('audio') ? 'voice' : 'file'
+    // --- SUMMARY CACHE ---
+    const summaryRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "llama-3.1-8b-instant",
+        messages: [{ role: "user", content: `Summarize this workout clearly: ${rawText.substring(0, 4000)}` }],
+        max_tokens: 500
+      })
     });
+    const summaryData: any = await summaryRes.json();
+    const cleanSummary = summaryData.choices?.[0]?.message?.content || rawText;
+
+    res.json({ text: cleanSummary, fileName, type: 'file' });
 
   } catch (err: any) {
-    console.error("❌ Media Extraction Error:", err.message);
-    res.status(500).json({ message: "extraction failed: " + err.message });
+    console.error("❌ Extraction Error:", err.message);
+    res.status(500).json({ message: "Error: " + err.message });
   }
 });
-
-// --- 5. ELITE CHAT LOGIC ---
+// --- 4. ELITE CHAT LOGIC ---
 aiRouter.post("/chat", async (req, res) => {
   const { userId, message, sessionId, inputType, fileName } = req.body;
   const apiKey = process.env.GROQ_API_KEY?.trim() || "";
   const uid = Number(userId);
+  const currentDateTime = new Date().toLocaleString('en-US', { timeZone: 'Asia/Colombo' });
 
   try {
     const dataRes = await query(`
       SELECT 
+        u.id AS user_db_id, 
         u.name, u.role, 
         p.gender, p.dob, p.current_weight, p.height, p.target_weight,
-        p.primary_goal, p.activity_level, p.medical_conditions, p.other_medical,
-        p.has_injuries, p.injury_details, p.has_allergies, p.allergy_details,
-        pr.name as package_name,
-        au.daily_count, au.last_reset, au.last_message_at 
+        p.primary_goal, p.has_injuries, p.injury_details, p.has_allergies, p.allergy_details,
+        pr.name as package_name, pr.id as package_id,
+        au.daily_count, au.last_message_at 
       FROM users u
       LEFT JOIN memberprofiles p ON u.id = p.userid
       LEFT JOIN pricing pr ON p.package_id = pr.id
       LEFT JOIN ai_usage au ON u.id = au.userid
       WHERE u.id = $1`, [uid]);
-
-     const modelToUse = (inputType === 'file' || inputType === 'voice') 
-      ? "llama-3.1-8b-instant" 
-      : "llama-3.3-70b-versatile";
-
-   const userData = (dataRes && dataRes.rows) ? dataRes.rows[0] : null;
-    if (!userData) return res.status(404).json({ message: "athlete profile not found." });
     
-    const pkg = (userData.package_name || '').toLowerCase();
-     // DEBUG: Add this to see exactly what is null in your Vercel logs
-    console.log("DEBUG USER DATA:", { role: userData.role, pkg: userData.package_name });
-    // --- TIERED LIMITS LOGIC (BULLETPROOF VERSION) ---
-let DAILY_LIMIT = 10; 
-let SESSION_MAX = 30;
+    const userData = dataRes?.rows[0];
+    if (!userData) return res.status(404).json({ message: "athlete profile not found." });
 
-// 1. Create safe versions of these strings (convert null to "")
-const safeRole = (userData.role || "").toLowerCase();
-const safePkg = (userData.package_name || "").toLowerCase();
+    const modelToUse = (inputType === 'file' || inputType === 'voice') 
+  ? "llama-3.3-70b-versatile" 
+  : "llama-3.3-70b-versatile"; // I have set both to 70b for your project safety.
 
-// 2. Use the safe strings for checks
-if (safeRole === 'admin') {
-    DAILY_LIMIT = 100;
-} 
-else if (safeRole.includes('pro')) {
-    DAILY_LIMIT = 20; 
-    SESSION_MAX = 50; 
-}
-// This line was crashing before because safePkg was null. Now it is ""
-else if (safePkg.includes('personal') || safePkg.includes('elite')) { 
-    DAILY_LIMIT = 35; 
-    SESSION_MAX = 50; 
-}
 
-// Now the code will continue to the AI call instead of crashing!
-    // Session Cap check
-    const countRes = await query("SELECT COUNT(*) FROM chat_history WHERE session_id = $1 AND role = 'user'", [sessionId]);
-    if (parseInt(countRes.rows[0].count) >= SESSION_MAX) {
-      return res.status(422).json({ message: `session limit reached (${SESSION_MAX} msgs). please start a new workout chat.` });
-    }
+    // --- UPDATED LOGGING ---
+    console.log(`-------------------------------------------`);
+    console.log(`👤 User ID: ${userData.user_db_id || uid}`); 
+    console.log(`📦 Package: ${userData.package_name || 'Free'} (ID: ${userData.package_id || 'N/A'})`);
+    console.log(`🤖 Model: ${modelToUse}`); // <--- MODEL SHOWN HERE
+    console.log(`🕒 Time: ${currentDateTime}`);
+    console.log(`💬 Message: ${message?.substring(0, 30)}...`);
+    const inputLabel = inputType === 'voice' ? '🎤 Voice' : '💬 Text';
+    console.log(`${inputLabel}: ${message}`);
 
-    // Cooldown check
+
+    // Safety checks for NULL values (Vercel fix)
+    const safeRole = (userData.role || "").toLowerCase();
+    const safePkg = (userData.package_name || "").toLowerCase();
+    const birthDate = new Date(userData.dob);
+    const age = userData.dob ? new Date().getFullYear() - birthDate.getFullYear() : "unknown";
+
+    // Tiered Limits
+    let DAILY_LIMIT = 10; 
+    let SESSION_MAX = 30;
+    if (safeRole === 'admin') DAILY_LIMIT = 100;
+    else if (safeRole.includes('pro')) { DAILY_LIMIT = 20; SESSION_MAX = 50; }
+    else if (safePkg.includes('personal') || safePkg.includes('elite')) { DAILY_LIMIT = 35; SESSION_MAX = 50; }
+
+    // Quota and Cooldown checks
     const now = new Date();
     const lastMsgTime = new Date(userData.last_message_at || 0);
     const hoursPassed = (now.getTime() - lastMsgTime.getTime()) / (1000 * 60 * 60);
-
     if (userData.daily_count >= DAILY_LIMIT && hoursPassed < 2) {
-        const unlock = new Date(lastMsgTime.getTime() + (2 * 60 * 60 * 1000)).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-        return res.status(403).json({ message: `daily quota exhausted. unblocks at ${unlock}.` });
+        return res.status(403).json({ message: "Daily quota exhausted." });
     }
-// L4: Fetch Active Workout
+
+    // Fetch Active Workout Cache
     let workoutContext = "no active workout.";
     const activeWorkoutRes = await query("SELECT title, content FROM workouts WHERE userid = $1 AND is_active = true LIMIT 1", [uid]);
-    const activePlan = (activeWorkoutRes && activeWorkoutRes.rows) ? activeWorkoutRes.rows[0] : null;
-    if (activePlan) {
-      workoutContext = `active workout: ${activePlan.title}. details: ${activePlan.content}`;
+    if (activeWorkoutRes?.rows[0]) {
+      workoutContext = `active workout: ${activeWorkoutRes.rows[0].title}. details: ${activeWorkoutRes.rows[0].content}`;
     }
 
-    // SYSTEM PROMPT
-    const birthDate = new Date(userData.dob);
-    const age = userData.dob ? new Date().getFullYear() - birthDate.getFullYear() : "unknown";
-    
-    // Athlete Context
-    let contextText = `athlete: ${userData.name}, ${age}y, ${userData.gender}, goal: ${userData.primary_goal}.`;
-
-    // Add medical conditions, injuries, allergies
-    if (userData.medical_conditions || userData.has_injuries || userData.has_allergies) {
-      contextText += `
-        medical conditions: ${userData.medical_conditions || 'none'},
-        injuries: ${userData.has_injuries ? userData.injury_details : 'none'},
-        allergies: ${userData.has_allergies ? userData.allergy_details : 'none'}`;
-    }
-    
+    // SYSTEM PROMPT (STRICT PROTOCOLS)
     const systemPrompt = `you are the "narrow fitness master coach". 
-    FACTS ABOUT THE ATHLETE (You must use these):
-- Name: ${userData.name}
-- Age: ${age} | Gender: ${userData.gender}
-- Height: ${userData.height}cm
-- Current Weight: ${userData.current_weight}kg
-- Target Weight: ${userData.target_weight || 'Not set'}kg
+    CURRENT DATE/TIME: ${currentDateTime} (Use this to greet the user correctly - e.g., don't say Good Morning at night).
+FACTS ABOUT THE ATHLETE:
+- Name: ${userData.name} | Age: ${age} | Gender: ${userData.gender}
+- Stats: H: ${userData.height}cm | W: ${userData.current_weight}kg | Target: ${userData.target_weight}kg
 - Goal: ${userData.primary_goal}
-- Injuries: ${userData.has_injuries ? userData.injury_details : 'None'}
-    athlete: ${userData.name}, ${age}y, ${userData.gender}, goal: ${userData.primary_goal}.
-    safety: injuries: ${userData.has_injuries ? userData.injury_details : 'none'}.
-    context: ${workoutContext}.
-   STRICT LANGUAGE PROTOCOL:
-1. You are bilingual (English & Sinhala).
-2. NEVER use "Singlish" (Sinhala words written in English letters like 'kohomada', 'machan', 'ayubowan').
-3. SCRIPT RULE: If the user speaks in Sinhala or Singlish, you MUST respond ONLY using the proper Sinhala Alphabet (සිංහල අකුරෙන්).
-4. If the user speaks in English, respond in English.
-5. Keep the tone professional but friendly (use 'ඔයා' or 'මචං' appropriately if the user is casual).
+- Safety: Injuries: ${userData.has_injuries ? userData.injury_details : 'none'} | Allergies: ${userData.has_allergies ? userData.allergy_details : 'none'}
+- Context: ${workoutContext}
+
+STRICT LANGUAGE PROTOCOL:
+1. If the user speaks English or provides an English phonetic transcription (like "Hello how are you"), respond in English,never use singlish.
+2. Only use Sinhala script (සිංහල අකුරෙන්) if the user is asking a question that is clearly intended to be answered in Sinhala.
+3. NEVER repeat yourself. Be professional and direct.
+4. English for English. Professional and motivating tone.
 
 STRICT OPERATIONAL RULES:
-1. GREETINGS: Respond warmly. Mention you are ready to assist with their "${activePlan?.title || 'fitness'}" workout plan.
-2. SCOPE & AWARENESS: You are fully aware of the athlete's profile. Answer questions about fitness, nutrition, recovery, and their own onboarding data (weight, height, goals, injuries). If asked about their specific stats, provide them clearly as they are part of their "Narrow Profile."
-3. OUT-OF-SCOPE: Only decline questions that are totally unrelated to the gym, health, or their profile (e.g., politics, movies). In those cases, use the standard refusal: "as your narrow coach, i must remain focused on your physical peak..."
-4. SAFETY FIRST: Always prioritize safety. Use the injury data (${userData.has_injuries ? userData.injury_details : 'none'}) to warn against dangerous movements.
-5. FORMATTING: Use Markdown Tables ONLY for structured "Schedules" (Workout routines or Diet plans). Use natural, motivating paragraphs for general questions, form explanations, or profile summaries.
-6. DATA DISCLOSURE: You have permission to discuss the athlete's biometrics with them. If they ask "Do you know my height?" or "What is my goal?", answer them directly using the provided data.
-7. TONE: Maintain a "master controller" personality—professional, motivating, and elite.
-8. TYPOGRAPHY: Use normal sentence case for descriptions.
-8.OUT-OF-SCOPE: If asked non-fitness questions in Sinhala, say: "ඔබේ ශාරීරික යෝග්‍යතාවය පිළිබඳ ගැටළු වලට පමණක් මට පිළිතුරු දිය හැක. කරුණාකර ව්‍යායාම සහ පෝෂණය පිළිබඳ ප්‍රශ්න පමණක් යොමු කරන්න." 
-9. TYPOGRAPHY: Use normal sentence case (not all-caps) for descriptions to ensure high readability.`;
+1. GREETINGS: Warmly mention readiness for their workout plan.
+2. SCOPE: Focus on fitness, nutrition, and onboarding stats.
+3. OUT-OF-SCOPE: Refuse unrelated topics using the standard "focus on physical peak" refusal.
+4. SAFETY: Prioritize injury data: ${userData.has_injuries ? userData.injury_details : 'none'}.
+5. FORMATTING: Use Markdown Tables ONLY for structured routines/diets.
+6. DATA DISCLOSURE: Disclose athlete's biometrics if asked.
+7.GREETINGS: Respond warmly. Check the current time (${currentDateTime}) and use appropriate greetings like "Good Evening" or "Good Morning".
+8. TYPOGRAPHY: Normal sentence case for readability.`;
 
-     const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+// 5. CALL GROQ API
+    const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
-      headers: { 
-        "Authorization": `Bearer ${apiKey}`, 
-        "Content-Type": "application/json" 
-      },
+      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-       model: modelToUse,
-        messages: [
-          { role: "system", content: systemPrompt }, 
-          { role: "user", content: message } 
-        ],
-        temperature: 0.3, 
-        max_tokens: 2500
+        model: modelToUse,
+        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: message }],
+        temperature: 0.5, // Increased slightly to prevent repetitive loops
+        max_tokens: 1500,  // Reduced from 2500 to save tokens and stop runaway loops
+        presence_penalty: 0.1 // Encourages the AI to talk about new things
       })
     });
 
     const data: any = await groqRes.json();
 
-    // Check if the API response is valid before reading 'choices[0]'
-    if (!groqRes.ok || data.error) {
-      console.error("❌ Groq API Error:", data.error || data);
-      return res.status(500).json({ 
-        message: "The AI is overwhelmed by this document. Try sending a shorter part of it." 
-      });
+    // 6. LOG TOKEN USAGE
+    if (data.usage) {
+      console.log(`🎫 Tokens: Prompt: ${data.usage.prompt_tokens} | Completion: ${data.usage.completion_tokens} | Total: ${data.usage.total_tokens}`);
     }
+    console.log(`-------------------------------------------`);
 
-    if (!data.choices || !data.choices[0]) {
-      throw new Error("AI returned an empty response.");
+    if (!groqRes.ok || !data.choices?.[0]) {
+       throw new Error(data.error?.message || "AI API Error");
     }
 
     const responseText = data.choices[0].message.content;
 
-    // SAVE & SYNC
+    // SAVE & UPDATE
     await query("INSERT INTO chat_history (userid, role, message, session_id, input_type, file_name) VALUES ($1, 'user', $2, $3, $4, $5)", [uid, message, sessionId, inputType || 'text', fileName || null]);
     await query("INSERT INTO chat_history (userid, role, message, session_id, input_type) VALUES ($1, 'model', $2, $3, 'text')", [uid, responseText, sessionId]);
     
     const resetCount = hoursPassed >= 2 ? 1 : Number(userData.daily_count) + 1;
     await query("UPDATE ai_usage SET daily_count = $1, last_message_at = NOW() WHERE userid = $2", [resetCount, uid]);
 
-    res.json({ text: responseText, usage: { current: resetCount, max: DAILY_LIMIT, sessionMax: SESSION_MAX } });
+    res.json({ text: responseText, usage: { current: resetCount, max: DAILY_LIMIT } });
 
   } catch (err: any) {
-    console.error("❌ AI Error:", err.message);
     res.status(500).json({ message: "the ai coach is busy. try again shortly." });
   }
 });
 
-// --- 6. DELETE SESSION ---
 aiRouter.delete("/sessions/:id", async (req, res) => {
-  const sid = Number(req.params.id);
   try {
-    await query("DELETE FROM chat_history WHERE session_id = $1", [sid]);
-    await query("DELETE FROM chat_sessions WHERE id = $1", [sid]);
+    await query("DELETE FROM chat_history WHERE session_id = $1", [req.params.id]);
+    await query("DELETE FROM chat_sessions WHERE id = $1", [req.params.id]);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ message: "fail" }); }
 });
