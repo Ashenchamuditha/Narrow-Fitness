@@ -188,6 +188,7 @@ aiRouter.post("/chat", async (req, res) => {
     console.log(`💬 Message: ${message?.substring(0, 30)}...`);
     const inputLabel = inputType === 'voice' ? '🎤 Voice' : '💬 Text';
     console.log(`${inputLabel}: ${message}`);
+    
 
 
     // Safety checks for NULL values (Vercel fix)
@@ -247,21 +248,33 @@ STRICT OPERATIONAL RULES:
 // 5. CALL GROQ API
     const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
-      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      headers: { 
+        "Authorization": `Bearer ${apiKey}`, 
+        "Content-Type": "application/json" 
+      },
       body: JSON.stringify({
         model: modelToUse,
         messages: [{ role: "system", content: systemPrompt }, { role: "user", content: message }],
-        temperature: 0.5, // Increased slightly to prevent repetitive loops
-        max_tokens: 1500,  // Reduced from 2500 to save tokens and stop runaway loops
-        presence_penalty: 0.1 // Encourages the AI to talk about new things
+        temperature: 0.3, 
+        max_tokens: 1500
       })
     });
 
     const data: any = await groqRes.json();
+    const remainingTokens = groqRes.headers.get("x-ratelimit-remaining-tokens") || "Unknown";
+    
+   
 
     // 6. LOG TOKEN USAGE
-    if (data.usage) {
-      console.log(`🎫 Tokens: Prompt: ${data.usage.prompt_tokens} | Completion: ${data.usage.completion_tokens} | Total: ${data.usage.total_tokens}`);
+     if (data.usage) {
+       console.log(`🎫 Tokens: Prompt: ${data.usage.prompt_tokens} | Completion: ${data.usage.completion_tokens} | Total: ${data.usage.total_tokens}`);
+      // 3. SHOW REMAINING TOKENS FOR THE DAY
+      console.log(`📉 TOKENS REMAINING (TPD): ${remainingTokens}`);
+      
+      // Calculate percentage used for your info (based on your TPD limits)
+      const limit = modelToUse.includes('70b') ? 100000 : 500000;
+      const percentUsed = ((limit - Number(remainingTokens)) / limit * 100).toFixed(2);
+      console.log(`📊 Daily Limit Usage: ${percentUsed}%`);
     }
     console.log(`-------------------------------------------`);
 
