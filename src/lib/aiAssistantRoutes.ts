@@ -15,67 +15,7 @@ const upload = multer({
   storage: storage, 
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB Limit
 });
-// Add this at the top of your file
-const pdf = require('pdf-parse');
 
-aiRouter.post("/process-media", upload.single('file'), async (req: any, res: Response) => {
-  if (!req.file) return res.status(400).json({ message: "no file uploaded" });
-
-  const mimeType = req.file.mimetype;
-  const fileName = req.file.originalname;
-  const apiKey = process.env.GROQ_API_KEY?.trim() || "";
-
-  try {
-    let extractedText = "";
-
-    // 1. WORD DOCUMENTS
-    if (mimeType.includes('officedocument') || fileName.toLowerCase().endsWith('.docx')) {
-      const result = await mammoth.extractRawText({ buffer: req.file.buffer });
-      extractedText = result.value;
-    }
-
-    // 2. PDF DOCUMENTS
-    else if (mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
-      const data = await pdf(req.file.buffer);
-      extractedText = data.text;
-    }
-
-    // 3. IMAGES (Using Groq Vision instead of Tesseract for Vercel stability)
-    else if (mimeType.startsWith('image/')) {
-      console.log("📸 Image detected, sending to Groq Vision...");
-      const base64Image = req.file.buffer.toString('base64');
-      
-      const visionRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "llama-3.2-11b-vision-preview",
-          messages: [{
-            role: "user",
-            content: [
-              { type: "text", text: "Extract all workout and diet details from this image." },
-              { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Image}` } }
-            ]
-          }]
-        })
-      });
-      const visionData: any = await visionRes.json();
-      extractedText = visionData.choices?.[0]?.message?.content || "";
-    }
-
-    // ... (Keep your existing audio logic) ...
-
-    if (!extractedText || extractedText.trim().length === 0) {
-      return res.status(422).json({ message: "Could not extract any text from this file." });
-    }
-
-    res.json({ text: extractedText.trim(), fileName, type: 'file' });
-
-  } catch (err: any) {
-    console.error("❌ Extraction Error:", err);
-    res.status(500).json({ message: "Error processing file: " + err.message });
-  }
-});
 // --- 2. SESSION MANAGEMENT ---
 
 // Get all workout sessions for the user
