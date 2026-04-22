@@ -149,7 +149,8 @@ aiRouter.post("/chat", async (req, res) => {
     if (!userData) return res.status(404).json({ message: "athlete profile not found." });
     
     const pkg = (userData.package_name || '').toLowerCase();
-    
+     // DEBUG: Add this to see exactly what is null in your Vercel logs
+    console.log("DEBUG USER DATA:", { role: userData.role, pkg: userData.package_name });
     // TIERED LIMITS logic
     let DAILY_LIMIT = 10; 
     let SESSION_MAX = 30;
