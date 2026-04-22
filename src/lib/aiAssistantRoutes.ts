@@ -15,7 +15,67 @@ const upload = multer({
   storage: storage, 
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB Limit
 });
+// Add this at the top of your file
+const pdf = require('pdf-parse');
 
+aiRouter.post("/process-media", upload.single('file'), async (req: any, res: Response) => {
+  if (!req.file) return res.status(400).json({ message: "no file uploaded" });
+
+  const mimeType = req.file.mimetype;
+  const fileName = req.file.originalname;
+  const apiKey = process.env.GROQ_API_KEY?.trim() || "";
+
+  try {
+    let extractedText = "";
+
+    // 1. WORD DOCUMENTS
+    if (mimeType.includes('officedocument') || fileName.toLowerCase().endsWith('.docx')) {
+      const result = await mammoth.extractRawText({ buffer: req.file.buffer });
+      extractedText = result.value;
+    }
+
+    // 2. PDF DOCUMENTS
+    else if (mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
+      const data = await pdf(req.file.buffer);
+      extractedText = data.text;
+    }
+
+    // 3. IMAGES (Using Groq Vision instead of Tesseract for Vercel stability)
+    else if (mimeType.startsWith('image/')) {
+      console.log("📸 Image detected, sending to Groq Vision...");
+      const base64Image = req.file.buffer.toString('base64');
+      
+      const visionRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "llama-3.2-11b-vision-preview",
+          messages: [{
+            role: "user",
+            content: [
+              { type: "text", text: "Extract all workout and diet details from this image." },
+              { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Image}` } }
+            ]
+          }]
+        })
+      });
+      const visionData: any = await visionRes.json();
+      extractedText = visionData.choices?.[0]?.message?.content || "";
+    }
+
+    // ... (Keep your existing audio logic) ...
+
+    if (!extractedText || extractedText.trim().length === 0) {
+      return res.status(422).json({ message: "Could not extract any text from this file." });
+    }
+
+    res.json({ text: extractedText.trim(), fileName, type: 'file' });
+
+  } catch (err: any) {
+    console.error("❌ Extraction Error:", err);
+    res.status(500).json({ message: "Error processing file: " + err.message });
+  }
+});
 // --- 2. SESSION MANAGEMENT ---
 
 // Get all workout sessions for the user
@@ -121,7 +181,6 @@ aiRouter.post("/process-media", upload.single('file'), async (req: any, res: Res
 });
 
 // --- 5. ELITE CHAT LOGIC ---
-
 aiRouter.post("/chat", async (req, res) => {
   const { userId, message, sessionId, inputType, fileName } = req.body;
   const apiKey = process.env.GROQ_API_KEY?.trim() || "";
@@ -129,16 +188,24 @@ aiRouter.post("/chat", async (req, res) => {
 
   try {
     const dataRes = await query(`
-      SELECT u.role, pr.name as package_name, au.daily_count, au.last_message_at,
-             p.gender, p.dob, p.current_weight, p.height, p.primary_goal, p.activity_level, 
-             p.medical_conditions, p.has_injuries, p.injury_details
+      SELECT 
+        u.name, u.role, 
+        p.gender, p.dob, p.current_weight, p.height, p.target_weight,
+        p.primary_goal, p.activity_level, p.medical_conditions, p.other_medical,
+        p.has_injuries, p.injury_details, p.has_allergies, p.allergy_details,
+        pr.name as package_name,
+        au.daily_count, au.last_reset, au.last_message_at 
       FROM users u
       LEFT JOIN memberprofiles p ON u.id = p.userid
       LEFT JOIN pricing pr ON p.package_id = pr.id
       LEFT JOIN ai_usage au ON u.id = au.userid
       WHERE u.id = $1`, [uid]);
 
-    const userData = dataRes.rows[0];
+     const modelToUse = (inputType === 'file' || inputType === 'voice') 
+      ? "llama-3.1-8b-instant" 
+      : "llama-3.3-70b-versatile";
+
+   const userData = (dataRes && dataRes.rows) ? dataRes.rows[0] : null;
     if (!userData) return res.status(404).json({ message: "athlete profile not found." });
     
     const pkg = (userData.package_name || '').toLowerCase();
@@ -147,8 +214,8 @@ aiRouter.post("/chat", async (req, res) => {
     let DAILY_LIMIT = 10; 
     let SESSION_MAX = 30;
     if (userData.role === 'admin') DAILY_LIMIT = 100;
-    else if (pkg.includes('pro')) { DAILY_LIMIT = 20; SESSION_MAX = 50; }
-    else if (pkg.includes('personal') || pkg.includes('elite')) { DAILY_LIMIT = 35; SESSION_MAX = 50; }
+    else if (userData.role.includes('pro')) { DAILY_LIMIT = 20; SESSION_MAX = 50; }
+    else if (userData.package_name.includes('personal') || userData.package_name.includes('elite')) { DAILY_LIMIT = 35; SESSION_MAX = 50; }
 
     // Session Cap check
     const countRes = await query("SELECT COUNT(*) FROM chat_history WHERE session_id = $1 AND role = 'user'", [sessionId]);
@@ -165,11 +232,10 @@ aiRouter.post("/chat", async (req, res) => {
         const unlock = new Date(lastMsgTime.getTime() + (2 * 60 * 60 * 1000)).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
         return res.status(403).json({ message: `daily quota exhausted. unblocks at ${unlock}.` });
     }
-
-    // Fetch active workout
-   let workoutContext = "no active workout.";
+// L4: Fetch Active Workout
+    let workoutContext = "no active workout.";
     const activeWorkoutRes = await query("SELECT title, content FROM workouts WHERE userid = $1 AND is_active = true LIMIT 1", [uid]);
-    const activePlan = activeWorkoutRes.rows[0]; // This defines the variable causing your error
+    const activePlan = (activeWorkoutRes && activeWorkoutRes.rows) ? activeWorkoutRes.rows[0] : null;
     if (activePlan) {
       workoutContext = `active workout: ${activePlan.title}. details: ${activePlan.content}`;
     }
@@ -178,7 +244,26 @@ aiRouter.post("/chat", async (req, res) => {
     const birthDate = new Date(userData.dob);
     const age = userData.dob ? new Date().getFullYear() - birthDate.getFullYear() : "unknown";
     
+    // Athlete Context
+    let contextText = `athlete: ${userData.name}, ${age}y, ${userData.gender}, goal: ${userData.primary_goal}.`;
+
+    // Add medical conditions, injuries, allergies
+    if (userData.medical_conditions || userData.has_injuries || userData.has_allergies) {
+      contextText += `
+        medical conditions: ${userData.medical_conditions || 'none'},
+        injuries: ${userData.has_injuries ? userData.injury_details : 'none'},
+        allergies: ${userData.has_allergies ? userData.allergy_details : 'none'}`;
+    }
+    
     const systemPrompt = `you are the "narrow fitness master coach". 
+    FACTS ABOUT THE ATHLETE (You must use these):
+- Name: ${userData.name}
+- Age: ${age} | Gender: ${userData.gender}
+- Height: ${userData.height}cm
+- Current Weight: ${userData.current_weight}kg
+- Target Weight: ${userData.target_weight || 'Not set'}kg
+- Goal: ${userData.primary_goal}
+- Injuries: ${userData.has_injuries ? userData.injury_details : 'None'}
     athlete: ${userData.name}, ${age}y, ${userData.gender}, goal: ${userData.primary_goal}.
     safety: injuries: ${userData.has_injuries ? userData.injury_details : 'none'}.
     context: ${workoutContext}.
@@ -191,30 +276,47 @@ aiRouter.post("/chat", async (req, res) => {
 
 STRICT OPERATIONAL RULES:
 1. GREETINGS: Respond warmly. Mention you are ready to assist with their "${activePlan?.title || 'fitness'}" workout plan.
-2. SCOPE: Answer fitness, nutrition, and recovery questions only. If asked anything else, say: "as your narrow coach, i must remain focused on your physical peak. please keep inquiries within fitness and nutrition scope."
-3. SAFETY FIRST: Always prioritize safety. If the athlete has an injury (${userData.has_injuries ? userData.injury_details : 'none'}), strictly forbid high-impact moves that could aggravate it.
-4. FORMATTING: Every workout routine or diet plan MUST be delivered in a neatly formatted markdown table.
-5. FORM GUIDANCE & VIDEOS: If an athlete asks "how to do" an exercise or asks for form guidance:
-   - Provide a 3-4 sentence paragraph explaining the setup, core movement, and muscle focus.
-   - Include one critical safety tip in **bold**.
-   - Provide a YouTube search link formatted exactly like this: [watch tutorial](https://www.youtube.com/results?search_query=how+to+do+[EXERCISE_NAME]+proper+form).
-   - Replace [EXERCISE_NAME] with the actual exercise (e.g., incline+bench+press).
-6. PRIVACY: Never reveal the athlete's raw weight or medical data in text unless they specifically ask you to analyze it.
-7. TONE: Maintain a "master controller" personality—professional, motivating, elite, and concise.
+2. SCOPE & AWARENESS: You are fully aware of the athlete's profile. Answer questions about fitness, nutrition, recovery, and their own onboarding data (weight, height, goals, injuries). If asked about their specific stats, provide them clearly as they are part of their "Narrow Profile."
+3. OUT-OF-SCOPE: Only decline questions that are totally unrelated to the gym, health, or their profile (e.g., politics, movies). In those cases, use the standard refusal: "as your narrow coach, i must remain focused on your physical peak..."
+4. SAFETY FIRST: Always prioritize safety. Use the injury data (${userData.has_injuries ? userData.injury_details : 'none'}) to warn against dangerous movements.
+5. FORMATTING: Use Markdown Tables ONLY for structured "Schedules" (Workout routines or Diet plans). Use natural, motivating paragraphs for general questions, form explanations, or profile summaries.
+6. DATA DISCLOSURE: You have permission to discuss the athlete's biometrics with them. If they ask "Do you know my height?" or "What is my goal?", answer them directly using the provided data.
+7. TONE: Maintain a "master controller" personality—professional, motivating, and elite.
+8. TYPOGRAPHY: Use normal sentence case for descriptions.
 8.OUT-OF-SCOPE: If asked non-fitness questions in Sinhala, say: "ඔබේ ශාරීරික යෝග්‍යතාවය පිළිබඳ ගැටළු වලට පමණක් මට පිළිතුරු දිය හැක. කරුණාකර ව්‍යායාම සහ පෝෂණය පිළිබඳ ප්‍රශ්න පමණක් යොමු කරන්න." 
 9. TYPOGRAPHY: Use normal sentence case (not all-caps) for descriptions to ensure high readability.`;
 
-    const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+     const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
-      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      headers: { 
+        "Authorization": `Bearer ${apiKey}`, 
+        "Content-Type": "application/json" 
+      },
       body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: message }],
-        temperature: 0.3, max_tokens: 2500
+       model: modelToUse,
+        messages: [
+          { role: "system", content: systemPrompt }, 
+          { role: "user", content: message } 
+        ],
+        temperature: 0.3, 
+        max_tokens: 2500
       })
     });
 
     const data: any = await groqRes.json();
+
+    // Check if the API response is valid before reading 'choices[0]'
+    if (!groqRes.ok || data.error) {
+      console.error("❌ Groq API Error:", data.error || data);
+      return res.status(500).json({ 
+        message: "The AI is overwhelmed by this document. Try sending a shorter part of it." 
+      });
+    }
+
+    if (!data.choices || !data.choices[0]) {
+      throw new Error("AI returned an empty response.");
+    }
+
     const responseText = data.choices[0].message.content;
 
     // SAVE & SYNC
