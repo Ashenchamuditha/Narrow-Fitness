@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import { query } from '../../api/index.js';
 import multer from 'multer';
 import { createRequire } from 'module';
+// Version Recovery: Stable Build
 
 // --- STABLE LIBRARIES ---
 const require = createRequire(import.meta.url);
