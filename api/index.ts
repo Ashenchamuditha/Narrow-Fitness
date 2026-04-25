@@ -91,7 +91,7 @@ const verifyEnvironment = () => {
 verifyEnvironment();
 
 // --- 1. CONFIGURATION ---
-const PORT = process.env.PORT || 5000;
+
 const JWT_SECRET = process.env.JWT_SECRET || "narrow_fitness_secret_key_123";
 const DATABASE_URL = process.env.DATABASE_URL;
 
@@ -116,12 +116,29 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.get("/api/health", (req, res) => {
   res.json({ status: "Backend is alive!", time: new Date() });
 });
+
 // Request Logging
 app.use((req, res, next) => {
   console.log(`[${new Date().toLocaleTimeString()}] ${req.method} ${req.url}`);
   next();
 });
+// --- 2. ROUTE DEFINITIONS ---
+const PORT = Number(process.env.PORT) || 5000;
 
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server ready at http://localhost:${PORT}`);
+});
+// Inside api/index.ts
+
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`===========================================`);
+  console.log(`🚀 NARROW FITNESS BACKEND IS LIVE`);
+  console.log(`📡 Port: ${PORT}`);
+  console.log(`🛠️ Mode: Docker/Development`);
+  console.log(`🕒 Started At: ${new Date().toLocaleString()}`);
+  console.log(`===========================================`);
+});
 // --- 5. AUTHENTICATION ---
 app.post("/api/auth/login", async (req, res) => {
   const { email, password } = req.body;
@@ -232,6 +249,7 @@ const runSystemHealthCheck = async () => {
 };
 
 // --- 9. START SERVER ---
+
 server.listen(PORT, async () => {
   await initDB();
   await runSystemHealthCheck();

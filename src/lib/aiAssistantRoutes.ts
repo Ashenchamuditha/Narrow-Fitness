@@ -2,24 +2,39 @@ import { Router, Response } from "express";
 import { query } from '../../api/index.js';
 import multer from 'multer';
 import { createRequire } from 'module';
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const require = createRequire(import.meta.url);
 const mammoth = require('mammoth'); 
-const pdfLib = require('pdf-parse'); 
+const pdfLib = require('pdf-parse'); // Standard import
 
-// --- FIXED HELPER WITH TYPES ---
-const safePdfParse = async (buffer: Buffer): Promise<any> => {
+
+
+// --- THE FINAL BULLETPROOF PDF HELPER (NO 'NEW' KEYWORD) ---
+const safePdfParse = async (buffer: any) => {
   try {
-    // We cast to 'any' to stop the red lines on .default and .pdf
     const lib = pdfLib as any;
 
-    if (typeof lib === 'function') return await lib(buffer);
-    if (lib.default && typeof lib.default === 'function') return await lib.default(buffer);
-    if (lib.pdf && typeof lib.pdf === 'function') return await lib.pdf(buffer);
-    
+    // 1. Check if the import itself is the function (Standard CJS)
+    if (typeof lib === 'function') {
+      return await lib(buffer);
+    }
+
+    // 2. Check if it's wrapped in .default (Standard ESM Interop)
+    if (lib.default && typeof lib.default === 'function') {
+      return await lib.default(buffer);
+    }
+
+    // 3. Last resort: check for common property names
+    const fallback = lib.pdf || lib.parse;
+    if (typeof fallback === 'function') {
+      return await fallback(buffer);
+    }
+
     throw new Error("PDF parser function not found in library.");
-  } catch (err) {
-    throw err;
+  } catch (err: any) {
+    console.error("PDF Library Internal Error:", err.message);
+    throw new Error("Could not parse this PDF. Please try another file.");
   }
 };
 
@@ -31,6 +46,9 @@ const upload = multer({
   storage: storage, 
   limits: { fileSize: 5 * 1024 * 1024 } // 5MB Limit for Vercel stability
 });
+
+// Initialize Gemini (Free, Stable, No Deprecations)
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 // --- 2. SESSION & HISTORY ---
 aiRouter.get("/sessions/:userId", async (req, res) => {
@@ -57,7 +75,9 @@ aiRouter.get("/history/:sessionId", async (req, res) => {
   } catch (err) { res.status(500).json({ messages: [] }); }
 });
 
-// --- 4. MEDIA EXTRACTION ENGINE (FIXED) ---
+
+
+// --- 3. MEDIA EXTRACTION ENGINE (ULTIMATE STABILITY) ---
 aiRouter.post("/process-media", upload.single('file'), async (req: any, res: Response) => {
   if (!req.file) return res.status(400).json({ message: "no file uploaded" });
 
@@ -68,48 +88,61 @@ aiRouter.post("/process-media", upload.single('file'), async (req: any, res: Res
   try {
     let rawText = "";
 
-    // 1. Handle Word (.docx)
+    // 1. WORD (.docx) - Status: Working
     if (mimeType.includes('officedocument') || fileName.toLowerCase().endsWith('.docx')) {
       const result = await mammoth.extractRawText({ buffer: req.file.buffer });
       rawText = result.value;
     }
-    // 2. Handle PDF (Using the safe helper)
-    else if (mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
-      console.log(`📄 Parsing PDF: ${fileName}`);
-      const data = await safePdfParse(req.file.buffer);
-      rawText = data.text;
+    // 2. PDF - Status: Fixed for Docker
+     else if (mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
+      console.log(`📄 Local Parsing PDF: ${fileName}`);
+      
+      // ENSURE THIS NAME MATCHES THE HELPER ABOVE
+      rawText = await safePdfParse(req.file.buffer); 
     }
-    // 3. Handle Images (Using the STABLE llava model)
-    else if (mimeType.startsWith('image/')) {
-      console.log(`📸 Parsing Image: ${fileName}`);
+    
+    // 3. IMAGES - Status: Using Current Stable Groq Model
+     else if (mimeType.startsWith('image/')) {
+      console.log(`📸 Groq Vision analyzing: ${fileName}`);
       const base64Image = req.file.buffer.toString('base64');
+      
       const visionRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
-        headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        headers: { 
+          "Authorization": `Bearer ${apiKey}`, 
+          "Content-Type": "application/json" 
+        },
         body: JSON.stringify({
-          model: "llava-v1.5-7b-4096", // Stable model, not decommissioned
+          // THIS IS THE NEW STABLE MODEL FOR 2026
+          model: "meta-llama/llama-4-scout-17b-16e-instruct", 
           messages: [{
             role: "user",
             content: [
-              { type: "text", text: "Read this fitness plan and extract all workout/diet text." },
+              { type: "text", text: "Extract all workout exercises, sets, reps, and diet instructions from this fitness image clearly." },
               { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Image}` } }
             ]
-          }]
+          }],
+          temperature: 0.1 // Keep temperature low for high extraction accuracy
         })
       });
+
       const visionData: any = await visionRes.json();
-      if (visionData.error) throw new Error("Vision API: " + visionData.error.message);
+
+      // Better error handling to see exactly what Groq says
+      if (visionData.error) {
+        console.error("❌ Groq Vision Error:", visionData.error);
+        throw new Error(`Vision API: ${visionData.error.message}`);
+      }
+
       rawText = visionData.choices?.[0]?.message?.content || "";
     }
-    //voice inputs (whisper)
-     else if (mimeType.startsWith('audio/') || fileName.endsWith('.webm')) {
+
+
+    // 4. VOICE - Status: Working
+    else if (mimeType.startsWith('audio/')) {
       const formData = new FormData();
       formData.append('file', new Blob([req.file.buffer], { type: mimeType }), fileName);
       formData.append('model', 'whisper-large-v3');
-      
-      // THIS PROMPT IS THE SECRET: It forces English letters for English sounds.
-      formData.append('prompt', 'This is a fitness conversation. If you hear English words like "Hi", "How are you", "Gym", "Workout", use the English Alphabet. Only use Sinhala script (සිංහල) for actual Sinhala words.');
-
       const whisperRes = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
         method: "POST",
         headers: { "Authorization": `Bearer ${apiKey}` },
@@ -117,26 +150,22 @@ aiRouter.post("/process-media", upload.single('file'), async (req: any, res: Res
       });
       const whisperData: any = await whisperRes.json();
       rawText = whisperData.text || "";
-
-      // --- LOG VOICE INPUT TO TERMINAL IMMEDIATELY ---
-      const voiceTokens = Math.ceil(rawText.length / 4);
-      console.log(`🎤 VOICE INPUT: "${rawText}"`);
-      console.log(`🎫 Transcription Est. Tokens: ~${voiceTokens}`);
     }
-    // --- VALIDATION & LOGGING (Once only) ---
-    if (!rawText || rawText.trim().length === 0) throw new Error("File was empty or unreadable.");
 
+    if (!rawText || rawText.trim().length === 0) throw new Error("Extraction resulted in empty text.");
+
+    // SUCCESS LOG
     const estTokens = Math.ceil(rawText.length / 4);
-    console.log(`📂 Attached Doc Size: ~${estTokens} tokens`);
+    console.log(`✅ Extraction Success! Size: ~${estTokens} tokens`);
 
-    // --- SUMMARY CACHE ---
+    // --- SUMMARY (Using Groq 8B - Fast & Saves your 70B tokens) ---
     const summaryRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "llama-3.1-8b-instant",
-        messages: [{ role: "user", content: `Summarize this workout clearly: ${rawText.substring(0, 4000)}` }],
-        max_tokens: 500
+        messages: [{ role: "user", content: `Summarize this workout for coaching context: ${rawText.substring(0, 4000)}` }],
+        max_tokens: 300
       })
     });
     const summaryData: any = await summaryRes.json();
@@ -145,10 +174,11 @@ aiRouter.post("/process-media", upload.single('file'), async (req: any, res: Res
     res.json({ text: cleanSummary, fileName, type: 'file' });
 
   } catch (err: any) {
-    console.error("❌ Extraction Error:", err.message);
-    res.status(500).json({ message: "Error: " + err.message });
+    console.error("❌ Media Error:", err.message);
+    res.status(500).json({ message: "Media Error: " + err.message });
   }
 });
+
 // --- 4. ELITE CHAT LOGIC ---
 aiRouter.post("/chat", async (req, res) => {
   const { userId, message, sessionId, inputType, fileName } = req.body;
@@ -231,7 +261,7 @@ FACTS ABOUT THE ATHLETE:
 
 STRICT LANGUAGE PROTOCOL:
 1. If the user speaks English or provides an English phonetic transcription (like "Hello how are you"), respond in English,never use singlish.
-2. Only use Sinhala script (සිංහල අකුරෙන්) if the user is asking a question that is clearly intended to be answered in Sinhala.
+2. use Sinhala script (සිංහල අකුරෙන්) if the user is asking a question that is clearly intended to be answered in Sinhala and singlish as well with sinhala script response with understandable way, never use singlish responds.
 3. NEVER repeat yourself. Be professional and direct.
 4. English for English. Professional and motivating tone.
 
