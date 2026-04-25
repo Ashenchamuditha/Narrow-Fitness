@@ -22,9 +22,8 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      // This bridges the gap between Port 5173 and Port 5000
       '/api': {
-         target: 'http://backend:5000', // Change 'localhost' or '127.0.0.1' to 'backend'
+        target: 'http://localhost:5000',
         changeOrigin: true,
         secure: false,
       },

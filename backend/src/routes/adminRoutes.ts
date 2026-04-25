@@ -1,6 +1,6 @@
 // route.ts
 import express from 'express';
-import { query } from '../../api/index.js'; 
+import { query } from '../index.js'; 
 import { Router } from "express";
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
@@ -23,8 +23,6 @@ transporter.verify((error) => {
 
 const adminRouter = Router();
 
-const router = express.Router();
-
 // Fetch all members for admin dashboard
 adminRouter.get("/users", async (req, res) => {
   try {
@@ -40,7 +38,7 @@ adminRouter.get("/users", async (req, res) => {
 
 
 // --- ADMIN: UPDATE MEMBER ---
-router.put("/users/:id", async (req, res) => {
+adminRouter.put("/users/:id", async (req, res) => {
   const { id } = req.params;
   const { name, email } = req.body;
   try {
@@ -61,7 +59,7 @@ router.put("/users/:id", async (req, res) => {
 });
 
 // --- ADMIN: DELETE MEMBER (Fixes the ID failure) ---
-router.delete("/users/:id", async (req, res) => {
+adminRouter.delete("/users/:id", async (req, res) => {
   const { id } = req.params;
   try {
     // 1. Delete from memberprofiles first (To prevent Foreign Key error)
@@ -127,7 +125,7 @@ adminRouter.get("/stats", async (req, res) => {
   }
 });
 // 1. Fetch ALL users for Manage Members page
-router.get("/users", async (req, res) => {
+adminRouter.get("/users", async (req, res) => {
   try {
     const result = await query(
       "SELECT id, name, email, role, created_at FROM users ORDER BY created_at ASC"
@@ -142,7 +140,7 @@ router.get("/users", async (req, res) => {
 // This combined with "/api/admin" makes "/api/admin/users"
 
 // 2. Fetch 5 most recent for Dashboard
-router.get("/users/recent", async (req, res) => {
+adminRouter.get("/users/recent", async (req, res) => {
   try {
     const result = await query(
       "SELECT id, name, email, role, created_at FROM users ORDER BY created_at DESC LIMIT 5"
@@ -154,7 +152,7 @@ router.get("/users/recent", async (req, res) => {
 });
 
 // 3. Stats for Dashboard Cards
-router.get("/stats", async (req, res) => {
+adminRouter.get("/stats", async (req, res) => {
   try {
     const userCount = await query("SELECT COUNT(*) FROM users");
     
@@ -191,7 +189,7 @@ router.get("/stats", async (req, res) => {
 });
 
 // 4. Add new member (user)
-router.post("/members", async (req, res) => {
+adminRouter.post("/members", async (req, res) => {
   const { name, email, password, role } = req.body;
   try {
     // Validate required fields
@@ -227,7 +225,7 @@ router.post("/members", async (req, res) => {
 });
 
 // Trainer CRUD Endpoints
-router.get("/trainers", async (req, res) => {
+adminRouter.get("/trainers", async (req, res) => {
   try {
     const result = await query(
       "SELECT id, name, description, image_url, contact, created_at FROM trainers ORDER BY created_at DESC"
@@ -240,7 +238,7 @@ router.get("/trainers", async (req, res) => {
 });
 
 // 2. Updated POST: Improved logging
-router.post("/trainers", async (req, res) => {
+adminRouter.post("/trainers", async (req, res) => {
   const { name, description, image_url, contact } = req.body;
   try {
     if (!name || !description) {
@@ -259,7 +257,7 @@ router.post("/trainers", async (req, res) => {
 });
 
 // 3. Updated PUT: Fixed logic to preserve image if not changed
-router.put("/trainers/:id", async (req, res) => {
+adminRouter.put("/trainers/:id", async (req, res) => {
   const { id } = req.params;
   const { name, description, image_url, contact } = req.body;
   
@@ -288,7 +286,7 @@ router.put("/trainers/:id", async (req, res) => {
   }
 });
 // 4. DELETE Trainer: Permanently remove from elite roster
-router.delete("/trainers/:id", async (req, res) => {
+adminRouter.delete("/trainers/:id", async (req, res) => {
   const { id } = req.params;
 
   try {
@@ -321,7 +319,7 @@ router.delete("/trainers/:id", async (req, res) => {
 // --- CLASSES MANAGEMENT ---
 
 // 1. GET all classes (Joining with Trainers and counting pending bookings)
-router.get("/classes", async (req, res) => {
+adminRouter.get("/classes", async (req, res) => {
   try {
     const result = await query(`
       SELECT 
@@ -345,7 +343,7 @@ router.get("/classes", async (req, res) => {
 });
 
 // 2. POST create a new class
-router.post("/classes", async (req, res) => {
+adminRouter.post("/classes", async (req, res) => {
   const { name, trainer_id, class_time, class_day, capacity } = req.body;
   try {
     const result = await query(
@@ -359,7 +357,7 @@ router.post("/classes", async (req, res) => {
 });
 
 // 3. PUT update a class (FIXED: Now handles is_cancelled toggle)
-router.put("/classes/:id", async (req, res) => {
+adminRouter.put("/classes/:id", async (req, res) => {
   const { id } = req.params;
   const { name, trainer_id, class_time, class_day, capacity, is_cancelled } = req.body;
   
@@ -392,7 +390,7 @@ router.put("/classes/:id", async (req, res) => {
 });
 
 // 4. DELETE a class
-router.delete("/classes/:id", async (req, res) => {
+adminRouter.delete("/classes/:id", async (req, res) => {
   const { id } = req.params;
   try {
     const result = await query("DELETE FROM classes WHERE id = $1 RETURNING *", [id]);
@@ -405,7 +403,7 @@ router.delete("/classes/:id", async (req, res) => {
 // --- PRICING MANAGEMENT ---
 
 // GET all pricing plans
-router.get("/pricing", async (req, res) => {
+adminRouter.get("/pricing", async (req, res) => {
   try {
     console.log('Backend: [GET /api/admin/pricing] Fetching all pricing plans...');
     const result = await query("SELECT * FROM pricing ORDER BY price ASC");
@@ -417,7 +415,7 @@ router.get("/pricing", async (req, res) => {
 });
 
 // POST create a new pricing plan
-router.post("/pricing", async (req, res) => {
+adminRouter.post("/pricing", async (req, res) => {
   const { name, price, duration, features, is_popular } = req.body;
   try {
     console.log('Backend: [POST /api/admin/pricing] Creating new pricing plan:', req.body);
@@ -433,7 +431,7 @@ router.post("/pricing", async (req, res) => {
 });
 
 // PUT update a pricing plan
-router.put("/pricing/:id", async (req, res) => {
+adminRouter.put("/pricing/:id", async (req, res) => {
   const { id } = req.params;
   const { name, price, duration, features, is_popular } = req.body;
   try {
@@ -451,7 +449,7 @@ router.put("/pricing/:id", async (req, res) => {
 });
 
 // DELETE a pricing plan
-router.delete("/pricing/:id", async (req, res) => {
+adminRouter.delete("/pricing/:id", async (req, res) => {
   const { id } = req.params;
   try {
     console.log(`Backend: [DELETE /api/admin/pricing/${id}] Deleting pricing plan...`);
@@ -467,7 +465,7 @@ router.delete("/pricing/:id", async (req, res) => {
 // --- ADMIN: ACTIVATION CODE GENERATION ---
 
 // This handles fetching the keys for the sidebar
-router.get("/codes", async (req, res) => {
+adminRouter.get("/codes", async (req, res) => {
   try {
     const result = await query(`
       SELECT ac.*, p.name as plan_name 
@@ -482,7 +480,7 @@ router.get("/codes", async (req, res) => {
 });
 
 // This handles generating the actual NF-XXXX key
-router.post("/codes/generate", async (req, res) => {
+adminRouter.post("/codes/generate", async (req, res) => {
   const { packageId } = req.body;
   console.log(`[Backend] Generating key for Package ID: ${packageId}`);
 
@@ -508,7 +506,7 @@ router.post("/codes/generate", async (req, res) => {
 // --- MEMBER PROFILE MANAGEMENT ---
 
 // GET profile by User ID
-router.get("/member/profile/:userId", async (req, res) => {
+adminRouter.get("/member/profile/:userId", async (req, res) => {
   const { userId } = req.params;
   try {
     const result = await query("SELECT * FROM member_profiles WHERE user_id = $1", [userId]);
@@ -523,7 +521,7 @@ router.get("/member/profile/:userId", async (req, res) => {
 // class bookings for a member
 
 // --- ADMIN: FETCH BOOKINGS FOR A SPECIFIC CLASS ---
-router.get("/classes/:id/bookings", async (req, res) => {
+adminRouter.get("/classes/:id/bookings", async (req, res) => {
   const { id } = req.params;
   console.log(`[Backend] Fetching registration requests for Class ID: ${id}`);
 
@@ -552,7 +550,7 @@ router.get("/classes/:id/bookings", async (req, res) => {
 });
 
 // --- 2. ADMIN: CONFIRM/APPROVE BOOKING WITH EMAIL ---
-router.put("/classes/bookings/:id/confirm", async (req, res) => {
+adminRouter.put("/classes/bookings/:id/confirm", async (req, res) => {
   const { id } = req.params;
   try {
     // A. Fetch User & Class info first
@@ -605,7 +603,7 @@ router.put("/classes/bookings/:id/confirm", async (req, res) => {
 });
 
 // --- 3. ADMIN: REMOVE MEMBER WITH EMAIL ---
-router.delete("/classes/bookings/:id", async (req, res) => {
+adminRouter.delete("/classes/bookings/:id", async (req, res) => {
   const { id } = req.params;
   try {
     // A. Fetch details before deleting
@@ -662,7 +660,7 @@ router.delete("/classes/bookings/:id", async (req, res) => {
 // adminRoutes.ts
 
 // Approve Booking
-router.put("/bookings/confirm/:id", async (req, res) => {
+adminRouter.put("/bookings/confirm/:id", async (req, res) => {
   const { id } = req.params;
 
   try {
@@ -690,7 +688,7 @@ router.put("/bookings/confirm/:id", async (req, res) => {
     res.status(500).json({ message: "Error" });
   }
 });
-router.put("/bookings/confirm/:id", async (req, res) => {
+adminRouter.put("/bookings/confirm/:id", async (req, res) => {
   // ... your update logic ...
   
   // SILENT SIGNAL: Tell Members to refresh their class cards
@@ -704,7 +702,7 @@ router.put("/bookings/confirm/:id", async (req, res) => {
 
 // 1. Fetch all inquiries
 // Path: GET /api/admin/inquiries
-router.get("/inquiries", async (req, res) => {
+adminRouter.get("/inquiries", async (req, res) => {
   try {
     const result = await query(
       "SELECT * FROM inquiries ORDER BY is_read ASC, created_at DESC"
@@ -718,7 +716,7 @@ router.get("/inquiries", async (req, res) => {
 
 // 2. Mark inquiry as read
 // Path: PUT /api/admin/inquiries/:id/read
-router.put("/inquiries/:id/read", async (req, res) => {
+adminRouter.put("/inquiries/:id/read", async (req, res) => {
   const { id } = req.params;
   try {
     const result = await query(
@@ -735,7 +733,7 @@ router.put("/inquiries/:id/read", async (req, res) => {
 
 // 3. Delete an inquiry
 // Path: DELETE /api/admin/inquiries/:id
-router.delete("/inquiries/:id", async (req, res) => {
+adminRouter.delete("/inquiries/:id", async (req, res) => {
   const { id } = req.params;
   try {
     await query("DELETE FROM inquiries WHERE id = $1", [id]);
@@ -748,7 +746,7 @@ router.delete("/inquiries/:id", async (req, res) => {
 
 // 4. Get Inquiry Stats (Total and Unread)
 // Path: GET /api/admin/stats/inquiries
-router.get("/stats/inquiries", async (req, res) => {
+adminRouter.get("/stats/inquiries", async (req, res) => {
     try {
       const result = await query(`
         SELECT 
@@ -766,7 +764,7 @@ router.get("/stats/inquiries", async (req, res) => {
     }
 });
 // Fetch gallery items
-router.get("/gallery", async (req, res) => {
+adminRouter.get("/gallery", async (req, res) => {
   try {
     const result = await query("SELECT * FROM gallery ORDER BY created_at DESC");
     res.json(result.rows);
@@ -776,7 +774,7 @@ router.get("/gallery", async (req, res) => {
 });
 
 // Add new gallery item
-router.post("/gallery", async (req, res) => {
+adminRouter.post("/gallery", async (req, res) => {
   const { title, description, image_url } = req.body;
   try {
     const result = await query(
@@ -795,7 +793,7 @@ router.post("/gallery", async (req, res) => {
 });
 
 // Delete gallery item
-router.delete("/gallery/:id", async (req, res) => {
+adminRouter.delete("/gallery/:id", async (req, res) => {
   try {
     await query("DELETE FROM gallery WHERE id = $1", [req.params.id]);
     res.json({ message: "Item deleted" });
@@ -805,7 +803,7 @@ router.delete("/gallery/:id", async (req, res) => {
 });
 // --- UPDATE GALLERY ITEM ---
 // URL: PUT /api/admin/gallery/:id
-router.put("/gallery/:id", async (req, res) => {
+adminRouter.put("/gallery/:id", async (req, res) => {
   const { id } = req.params;
   const { title, description } = req.body;
 
@@ -826,7 +824,7 @@ router.put("/gallery/:id", async (req, res) => {
   }
 });
 // adminRouter.post("/broadcast-email", ...)
-router.post("/broadcast-email", async (req, res) => {
+adminRouter.post("/broadcast-email", async (req, res) => {
   const { subject, message } = req.body;
 
   try {
@@ -895,4 +893,4 @@ router.post("/broadcast-email", async (req, res) => {
     res.status(500).json({ message: "Could not initiate broadcast. Check server logs." });
   }
 });
-export default router;
+export default adminRouter;

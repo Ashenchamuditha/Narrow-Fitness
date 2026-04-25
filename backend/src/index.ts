@@ -47,11 +47,9 @@ pool.query('SELECT NOW()', (err, res) => {
 
 
 // Router Imports
-// Change from './src/lib/...' to '../src/lib/...'
-
-import adminRouter from "../src/lib/adminRoutes.js";
-import memberRouter from "../src/lib/memberRoutes.js";
-import aiRouter from "../src/lib/aiAssistantRoutes.js";
+import adminRouter from "./routes/adminRoutes.js";
+import memberRouter from "./routes/memberRoutes.js";
+import aiRouter from "./routes/aiAssistantRoutes.js";
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
@@ -113,6 +111,7 @@ app.set("socketio", io);
 app.use(cors());
 app.use(express.json({ limit: '50mb' })); 
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 app.get("/api/health", (req, res) => {
   res.json({ status: "Backend is alive!", time: new Date() });
 });

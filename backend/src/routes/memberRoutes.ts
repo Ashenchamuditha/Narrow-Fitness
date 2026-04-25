@@ -1,6 +1,6 @@
 import { Router } from "express";
 import bcrypt from 'bcryptjs';
-import { query } from '../../api/index.js'; 
+import { query } from '../index.js'; 
 import nodemailer from 'nodemailer';
 import jwt from 'jsonwebtoken';
 

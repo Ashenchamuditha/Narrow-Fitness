@@ -1,5 +1,5 @@
 import { Router, Response } from "express";
-import { query } from '../../api/index.js';
+import { query } from '../index.js';
 import multer from 'multer';
 import { createRequire } from 'module';
 import { GoogleGenerativeAI } from "@google/generative-ai";
