@@ -805,12 +805,12 @@ adminRouter.delete("/gallery/:id", async (req, res) => {
 // URL: PUT /api/admin/gallery/:id
 adminRouter.put("/gallery/:id", async (req, res) => {
   const { id } = req.params;
-  const { title, description } = req.body;
+  const { title, description, image_url } = req.body;
 
   try {
     const result = await query(
-      "UPDATE gallery SET title = $1, description = $2 WHERE id = $3 RETURNING *",
-      [title, description, id]
+      "UPDATE gallery SET title = $1, description = $2, image_url = $3 WHERE id = $4 RETURNING *",
+      [title, description, image_url, id]
     );
 
     if (result.rows.length === 0) {

@@ -288,25 +288,6 @@ memberRouter.get("/workouts/detail/:id", async (req, res) => {
     res.status(500).json({ message: "Error loading content" });
   }
 });
-// --- CORRECTED: Mapping SQL Snake Case to React State ---
-  const handleEdit = async (e: React.MouseEvent, plan: any) => {
-    e.stopPropagation();
-    
-    try {
-      // 1. Fetch the full record from the Backend
-      const res = await fetch(`/api/member/workouts/detail/${plan.id}`);
-      if (!res.ok) throw new Error("Fetch failed");
-      
-      // We cast as 'any' to stop TypeScript from showing red lines on .source_type etc.
-      const data = (await res.json()) as any; 
-
-     
-
-    } catch (err) {
-      console.error("Edit Error:", err);
-      alert("Could not load workout details.");
-    }
-  };
 
 // 3. NEW: UPDATE an existing workout plan
 memberRouter.put("/workouts/:id", async (req, res) => {

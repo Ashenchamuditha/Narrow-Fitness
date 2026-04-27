@@ -13,7 +13,7 @@ import bcrypt from "bcryptjs";
 
 // 1. DETERMINE ENVIRONMENT
 const dbUrl = process.env.DATABASE_URL || "";
-const isLocal = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
+const isLocal = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1') || dbUrl.includes('@db:');
 
 // 2. CREATE CONFIG DYNAMICALLY
 const poolConfig: any = {
@@ -124,20 +124,6 @@ app.use((req, res, next) => {
 // --- 2. ROUTE DEFINITIONS ---
 const PORT = Number(process.env.PORT) || 5000;
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server ready at http://localhost:${PORT}`);
-});
-// Inside api/index.ts
-
-
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`===========================================`);
-  console.log(`🚀 NARROW FITNESS BACKEND IS LIVE`);
-  console.log(`📡 Port: ${PORT}`);
-  console.log(`🛠️ Mode: Docker/Development`);
-  console.log(`🕒 Started At: ${new Date().toLocaleString()}`);
-  console.log(`===========================================`);
-});
 // --- 5. AUTHENTICATION ---
 app.post("/api/auth/login", async (req, res) => {
   const { email, password } = req.body;
@@ -188,14 +174,210 @@ app.use("/api", memberRouter);
 
 const initDB = async () => {
   try {
-    // Basic User & Profile Tables
-    await query(`CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, name VARCHAR(255), email VARCHAR(255) UNIQUE, password VARCHAR(255), role VARCHAR(50) DEFAULT 'user', is_profile_complete BOOLEAN DEFAULT FALSE, profile_image TEXT, package_id INT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
-    await query(`CREATE TABLE IF NOT EXISTS memberprofiles (userid INT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, primary_goal VARCHAR(50), current_weight DECIMAL, height DECIMAL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
-    await query(`CREATE TABLE IF NOT EXISTS trainers (id SERIAL PRIMARY KEY, name VARCHAR(255), description TEXT, image_url TEXT, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);`);
+    // 1. Pricing & Packages (Critical Dependency)
+    await query(`CREATE TABLE IF NOT EXISTS pricing (
+      id SERIAL PRIMARY KEY, 
+      name VARCHAR(255) NOT NULL, 
+      price DECIMAL NOT NULL, 
+      duration VARCHAR(50) DEFAULT 'Month', 
+      features TEXT[] DEFAULT '{}', 
+      is_popular BOOLEAN DEFAULT FALSE, 
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );`);
+
+    // 2. Users Table
+    await query(`CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY, 
+      name VARCHAR(255), 
+      email VARCHAR(255) UNIQUE, 
+      password VARCHAR(255), 
+      role VARCHAR(50) DEFAULT 'user', 
+      is_profile_complete BOOLEAN DEFAULT FALSE, 
+      profile_image TEXT, 
+      package_id INT REFERENCES pricing(id) ON DELETE SET NULL, 
+      subscription_status VARCHAR(50) DEFAULT 'none',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );`);
+
+    // Migrate Users if exists
+    try {
+      await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_status VARCHAR(50) DEFAULT 'none';`);
+      await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS package_id INT REFERENCES pricing(id) ON DELETE SET NULL;`);
+      await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_profile_complete BOOLEAN DEFAULT FALSE;`);
+      await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_image TEXT;`);
+    } catch (e) { /* already exists */ }
+
+    // 3. Member Profiles
+    await query(`CREATE TABLE IF NOT EXISTS memberprofiles (
+      userid INT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, 
+      gender VARCHAR(20),
+      dob DATE,
+      phone VARCHAR(20),
+      address TEXT,
+      current_weight DECIMAL, 
+      height DECIMAL, 
+      target_weight DECIMAL,
+      medical_conditions TEXT,
+      medical_details TEXT,
+      has_injuries BOOLEAN DEFAULT FALSE,
+      injury_details TEXT,
+      has_allergies BOOLEAN DEFAULT FALSE,
+      allergy_details TEXT,
+      primary_goal VARCHAR(100), 
+      activity_level VARCHAR(100),
+      emergency_contact_name VARCHAR(255),
+      emergency_contact_phone VARCHAR(20),
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );`);
+
+    // Migrate MemberProfiles
+    try {
+      await query(`ALTER TABLE memberprofiles ADD COLUMN IF NOT EXISTS gender VARCHAR(20);`);
+      await query(`ALTER TABLE memberprofiles ADD COLUMN IF NOT EXISTS dob DATE;`);
+      await query(`ALTER TABLE memberprofiles ADD COLUMN IF NOT EXISTS phone VARCHAR(20);`);
+      await query(`ALTER TABLE memberprofiles ADD COLUMN IF NOT EXISTS address TEXT;`);
+      await query(`ALTER TABLE memberprofiles ADD COLUMN IF NOT EXISTS target_weight DECIMAL;`);
+      await query(`ALTER TABLE memberprofiles ADD COLUMN IF NOT EXISTS medical_conditions TEXT;`);
+      await query(`ALTER TABLE memberprofiles ADD COLUMN IF NOT EXISTS medical_details TEXT;`);
+      await query(`ALTER TABLE memberprofiles ADD COLUMN IF NOT EXISTS has_injuries BOOLEAN DEFAULT FALSE;`);
+      await query(`ALTER TABLE memberprofiles ADD COLUMN IF NOT EXISTS injury_details TEXT;`);
+      await query(`ALTER TABLE memberprofiles ADD COLUMN IF NOT EXISTS has_allergies BOOLEAN DEFAULT FALSE;`);
+      await query(`ALTER TABLE memberprofiles ADD COLUMN IF NOT EXISTS allergy_details TEXT;`);
+      await query(`ALTER TABLE memberprofiles ADD COLUMN IF NOT EXISTS activity_level VARCHAR(100);`);
+      await query(`ALTER TABLE memberprofiles ADD COLUMN IF NOT EXISTS emergency_contact_name VARCHAR(255);`);
+      await query(`ALTER TABLE memberprofiles ADD COLUMN IF NOT EXISTS emergency_contact_phone VARCHAR(20);`);
+    } catch (e) { /* already exists */ }
+
+    // 4. Trainers & Classes
+    await query(`CREATE TABLE IF NOT EXISTS trainers (
+      id SERIAL PRIMARY KEY, 
+      name VARCHAR(255), 
+      description TEXT, 
+      image_url TEXT, 
+      contact VARCHAR(255),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );`);
     
-    // AI Persistence Tables
-    await query(`CREATE TABLE IF NOT EXISTS ai_usage (userid INT PRIMARY KEY, daily_count INT DEFAULT 0, last_reset DATE DEFAULT CURRENT_DATE);`);
-    await query(`CREATE TABLE IF NOT EXISTS chat_history (id SERIAL PRIMARY KEY, userid INT, role VARCHAR(20), message TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
+    // Migrate Trainers
+    try {
+      await query(`ALTER TABLE trainers ADD COLUMN IF NOT EXISTS contact VARCHAR(255);`);
+    } catch (e) {}
+
+    await query(`CREATE TABLE IF NOT EXISTS classes (
+      id SERIAL PRIMARY KEY, 
+      name VARCHAR(255), 
+      trainer_id INT REFERENCES trainers(id) ON DELETE SET NULL, 
+      class_time VARCHAR(50), 
+      class_day VARCHAR(50), 
+      capacity INT, 
+      is_cancelled BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );`);
+
+    await query(`CREATE TABLE IF NOT EXISTS class_bookings (
+      id SERIAL PRIMARY KEY, 
+      class_id INT REFERENCES classes(id) ON DELETE CASCADE, 
+      userid INT REFERENCES users(id) ON DELETE CASCADE, 
+      status VARCHAR(50) DEFAULT 'pending', 
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );`);
+
+    // 5. Activation Codes
+    await query(`CREATE TABLE IF NOT EXISTS activation_codes (
+      code VARCHAR(50) PRIMARY KEY, 
+      package_id INT REFERENCES pricing(id) ON DELETE CASCADE, 
+      is_used BOOLEAN DEFAULT FALSE, 
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );`);
+
+    // 6. Public Inquiries & OTPs
+    await query(`CREATE TABLE IF NOT EXISTS inquiries (
+      id SERIAL PRIMARY KEY, 
+      full_name VARCHAR(255), 
+      email VARCHAR(255), 
+      subject VARCHAR(255), 
+      message TEXT, 
+      is_read BOOLEAN DEFAULT FALSE, 
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );`);
+
+    await query(`CREATE TABLE IF NOT EXISTS inquiry_otps (
+      email VARCHAR(255) PRIMARY KEY, 
+      code VARCHAR(10), 
+      expires_at TIMESTAMP
+    );`);
+
+    await query(`CREATE TABLE IF NOT EXISTS signup_otps (
+      email VARCHAR(255) PRIMARY KEY, 
+      otp VARCHAR(10), 
+      expiry TIMESTAMP
+    );`);
+
+    await query(`CREATE TABLE IF NOT EXISTS password_reset_otps (
+      email VARCHAR(255) PRIMARY KEY, 
+      otp VARCHAR(10), 
+      expiry TIMESTAMP
+    );`);
+
+    // 7. Gallery
+    await query(`CREATE TABLE IF NOT EXISTS gallery (
+      id SERIAL PRIMARY KEY, 
+      title VARCHAR(255), 
+      description TEXT, 
+      image_url TEXT, 
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );`);
+
+    // 8. Workouts
+    await query(`CREATE TABLE IF NOT EXISTS workouts (
+      id SERIAL PRIMARY KEY, 
+      userid INT REFERENCES users(id) ON DELETE CASCADE, 
+      title VARCHAR(255), 
+      source_type VARCHAR(50), 
+      content TEXT, 
+      file_name VARCHAR(255), 
+      is_active BOOLEAN DEFAULT FALSE, 
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );`);
+
+    // 9. AI Assistant Persistence
+    await query(`CREATE TABLE IF NOT EXISTS chat_sessions (
+      id SERIAL PRIMARY KEY, 
+      userid INT REFERENCES users(id) ON DELETE CASCADE, 
+      title VARCHAR(255), 
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );`);
+
+    await query(`CREATE TABLE IF NOT EXISTS chat_history (
+      id SERIAL PRIMARY KEY, 
+      userid INT REFERENCES users(id) ON DELETE CASCADE, 
+      session_id INT REFERENCES chat_sessions(id) ON DELETE CASCADE,
+      role VARCHAR(20), 
+      message TEXT, 
+      input_type VARCHAR(50) DEFAULT 'text',
+      file_name VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );`);
+
+    // Migrate Chat History
+    try {
+      await query(`ALTER TABLE chat_history ADD COLUMN IF NOT EXISTS session_id INT REFERENCES chat_sessions(id) ON DELETE CASCADE;`);
+      await query(`ALTER TABLE chat_history ADD COLUMN IF NOT EXISTS input_type VARCHAR(50) DEFAULT 'text';`);
+      await query(`ALTER TABLE chat_history ADD COLUMN IF NOT EXISTS file_name VARCHAR(255);`);
+    } catch (e) {}
+
+    await query(`CREATE TABLE IF NOT EXISTS ai_usage (
+      userid INT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, 
+      daily_count INT DEFAULT 0, 
+      last_message_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      last_reset DATE DEFAULT CURRENT_DATE
+    );`);
+
+    // Migrate AI Usage
+    try {
+      await query(`ALTER TABLE ai_usage ADD COLUMN IF NOT EXISTS last_message_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
+      await query(`ALTER TABLE ai_usage ADD COLUMN IF NOT EXISTS last_reset DATE DEFAULT CURRENT_DATE;`);
+    } catch (e) {}
     
     console.log("📦 DATABASE: All Tables Verified & Initialized.");
   } catch (err) {
@@ -249,10 +431,16 @@ const runSystemHealthCheck = async () => {
 
 // --- 9. START SERVER ---
 
-server.listen(PORT, async () => {
+server.listen(PORT, '0.0.0.0', async () => {
   await initDB();
   await runSystemHealthCheck();
-  console.log(`🚀 Narrow Fitness API Live: http://localhost:${PORT}`);
+  console.log(`
+===========================================
+🚀 NARROW FITNESS BACKEND IS LIVE
+📡 Port: ${PORT}
+🛠️ Mode: Docker/Development
+🕒 Started At: ${new Date().toLocaleString()}
+===========================================`);
 });
 // inquiries
 // --- PUBLIC CONTACT SUBMISSION ---

@@ -20,8 +20,10 @@ services:
       dockerfile: Dockerfile
     container_name: narrow-fitness-backend
     restart: always
+    env_file:
+      - ./backend/.env
     environment:
-      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-password}@db:5432/${DB_NAME:-narrow_fitness}
+      - DATABASE_URL=postgresql://neondb_owner:npg_4IYwlqV6uCby@ep-odd-unit-aoqw9vxw-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
       - JWT_SECRET=${JWT_SECRET:-narrow_fitness_secret_key_123}
       - EMAIL_USER=${EMAIL_USER}
       - EMAIL_PASS=${EMAIL_PASS}
@@ -33,7 +35,7 @@ services:
     volumes:
       - ./backend/uploads:/app/uploads
     ports:
-      - "5000:5000"
+      - "5001:5000"
 
   frontend:
     build:

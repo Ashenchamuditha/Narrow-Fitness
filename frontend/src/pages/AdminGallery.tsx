@@ -66,7 +66,7 @@ export default function AdminGallery() {
         body: JSON.stringify({
           title: formData.title,
           description: formData.description,
-          image_url: formData.image // Only required for POST, ignored by PUT if not needed
+          image_url: formData.image
         })
       });
 
@@ -160,17 +160,25 @@ export default function AdminGallery() {
               </div>
 
               <div className="space-y-5">
-                {/* Image Upload/Preview (Hidden when editing as usually we only edit text) */}
-                {!editingId && (
-                   <div className="relative border-2 border-dashed border-slate-200 rounded-3xl h-40 flex flex-col items-center justify-center overflow-hidden bg-slate-50">
-                   {formData.image ? <img src={formData.image} className="w-full h-full object-cover" /> : 
-                   <label className="cursor-pointer flex flex-col items-center">
+                {/* Image Upload/Preview - Always visible and editable */}
+                <div className="relative border-2 border-dashed border-slate-200 rounded-3xl h-48 flex flex-col items-center justify-center overflow-hidden bg-slate-50 group">
+                  {formData.image ? (
+                    <>
+                      <img src={formData.image} className="w-full h-full object-cover" />
+                      <label className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center cursor-pointer text-white">
+                        <Camera className="w-8 h-8 mb-2" />
+                        <span className="text-[10px] font-black uppercase">Change Photo</span>
+                        <input type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
+                      </label>
+                    </>
+                  ) : (
+                    <label className="cursor-pointer flex flex-col items-center w-full h-full justify-center">
                       <Camera className="w-8 h-8 text-slate-300 mb-2" />
                       <span className="text-[10px] font-black text-slate-400 uppercase">Select Gym Photo</span>
                       <input type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
-                   </label>}
-                   </div>
-                )}
+                    </label>
+                  )}
+                </div>
 
                 <div>
                   <label className="text-[9px] font-black uppercase text-slate-400 ml-2 mb-1 block">Visual Title</label>

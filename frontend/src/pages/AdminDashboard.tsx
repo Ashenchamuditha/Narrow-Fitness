@@ -67,9 +67,8 @@ export default function AdminDashboard() {
     return;
   }
 
-  // ✅ STEP 1: Determine if we are on Localhost or Live
-  // If localhost, use the full path. If Live, use a relative path.
-  const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:5000' : '';
+  // ✅ STEP 1: Always use relative paths for Docker Nginx proxy
+  const API_BASE = '';
 
   const fetchDashboardData = async () => {
     try {
@@ -103,7 +102,7 @@ export default function AdminDashboard() {
     setIsSending(true); // START PROCESSING
 
     try {
-      const res = await fetch('http://localhost:5000/api/admin/broadcast-email', {
+      const res = await fetch('/api/admin/broadcast-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(broadcastData)
