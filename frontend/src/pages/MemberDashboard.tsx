@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { 
   Dumbbell, 
   TrendingUp, 
@@ -19,7 +20,14 @@ import {
   MessageSquare,
   Calculator,
   X,
-  RefreshCw
+  RefreshCw,
+  QrCode,
+  Scan,
+  Loader2,
+  CheckCircle2,
+  LogIn,
+  LogOut,
+  AlertCircle
 } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import MemberLayout from '../components/MemberLayout';
@@ -31,27 +39,43 @@ export default function MemberDashboard() {
   const [lastAiMessage, setLastAiMessage] = useState<string>("Ready to achieve your goals? Ask me anything!");
   const [lastAiTime, setLastAiTime] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [attendanceStatus, setAttendanceStatus] = useState<any>(null);
+  const [membership, setMembership] = useState<any>(null);
+  const [lastSession, setLastSession] = useState<any>(null);
+  const [sessionDuration, setSessionDuration] = useState<number>(0);
+  const [isScanModalOpen, setIsScanModalOpen] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
   
-  // Quick BMI States
+  const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
   const [isBmiModalOpen, setIsBmiModalOpen] = useState(false);
   const [bmiInputs, setBmiInputs] = useState({ weight: '', height: '' });
   const [bmiResult, setBmiResult] = useState<string | null>(null);
 
   const navigate = useNavigate();
   const location = useLocation();
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+
+  const showNotification = (message: string, type: 'success' | 'error') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 4000);
+  };
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [location.pathname]);
 
   useEffect(() => {
-    window.history.pushState(null, '', window.location.href);
-    const handleBackButton = () => {
-      window.history.pushState(null, '', window.location.href);
-    };
-    window.addEventListener('popstate', handleBackButton);
-    return () => window.removeEventListener('popstate', handleBackButton);
-  }, []);
+    let interval: any;
+    if (attendanceStatus) {
+      interval = setInterval(() => {
+        const start = new Date(attendanceStatus.check_in).getTime();
+        const now = new Date().getTime();
+        setSessionDuration(Math.floor((now - start) / 60000));
+      }, 30000);
+    }
+    return () => clearInterval(interval);
+  }, [attendanceStatus]);
 
   useEffect(() => {
     const storedUser = localStorage.getItem('narrow_fitness_user');
@@ -63,7 +87,9 @@ export default function MemberDashboard() {
     const parsedUser = JSON.parse(storedUser);
     setUser(parsedUser);
 
-    // 1. Fetch Profile
+    fetchAttendanceStatus(parsedUser.id);
+    fetchMembership(parsedUser.id);
+
     fetch(`/api/member/profile/${parsedUser.id}`)
       .then(res => res.ok ? res.json() : null)
       .then(data => {
@@ -80,14 +106,12 @@ export default function MemberDashboard() {
       })
       .catch(err => console.error('Error fetching profile:', err));
 
-    // 2. Fetch Classes
     fetch(`/api/member/classes?userId=${parsedUser.id}`)
       .then(res => res.ok ? res.json() : [])
       .then(data => {
         if (Array.isArray(data)) setClasses(data.slice(0, 3));
       });
 
-    // 3. Fetch Active Workout
     fetch(`/api/member/workouts/${parsedUser.id}`)
       .then(res => res.ok ? res.json() : [])
       .then(data => {
@@ -97,34 +121,159 @@ export default function MemberDashboard() {
         }
       });
 
-    // 4. FETCH LAST AI MESSAGE (Fixed logic to match your router output)
-    fetch(`/api/member/ai/history/${parsedUser.id}`)
-      .then(res => res.json())
-      .then(data => {
-        // Data comes in as { messages: [...], usage: {...} }
-        const msgs = data.messages;
-        if (msgs && Array.isArray(msgs) && msgs.length > 0) {
-          const modelMessages = msgs.filter((m: any) => m.role === 'model');
-          if (modelMessages.length > 0) {
-            const latest = modelMessages[modelMessages.length - 1];
-            // Clean Markdown markers for the preview
-            const cleanText = latest.message
-              .replace(/[|#*-]/g, '')
-              .replace(/\s+/g, ' ')
-              .trim()
-              .substring(0, 120);
-            
-            setLastAiMessage(cleanText + (latest.message.length > 120 ? '...' : ''));
-            setLastAiTime(new Date(latest.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' }));
+    // --- NEW: FETCH LATEST AI COACH MESSAGE ---
+    const fetchLatestAiInsight = async () => {
+      try {
+        const sessionsRes = await fetch(`/api/member/ai/sessions/${parsedUser.id}`);
+        const sessions = await sessionsRes.json();
+        
+        if (sessions && Array.isArray(sessions) && sessions.length > 0) {
+          const latestSessionId = sessions[0].id; // sessions are ORDER BY created_at DESC
+          const historyRes = await fetch(`/api/member/ai/history/${latestSessionId}`);
+          const historyData = await historyRes.json();
+          
+          if (historyData.messages && Array.isArray(historyData.messages)) {
+            const modelMessages = historyData.messages.filter((m: any) => m.role === 'model');
+            if (modelMessages.length > 0) {
+              const latest = modelMessages[modelMessages.length - 1];
+              const cleanText = latest.message
+                .replace(/[|#*-]/g, '')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .substring(0, 120);
+              
+              setLastAiMessage(cleanText + (latest.message.length > 120 ? '...' : ''));
+              setLastAiTime(new Date(latest.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' }));
+            }
           }
         }
-      })
-      .catch(err => console.error('Error fetching AI history:', err));
+      } catch (err) {
+        console.error('Error fetching AI insight:', err);
+      }
+    };
+
+    fetchLatestAiInsight();
 
     setLoading(false);
   }, [navigate]);
 
-  // BMI Calculation Logic
+  const fetchMembership = async (userId: number) => {
+    try {
+      const res = await fetch(`/api/member/membership/${userId}`);
+      const data = await res.json();
+      setMembership(data);
+    } catch (e) { console.error(e); }
+  };
+
+  const fetchAttendanceStatus = async (userId: number) => {
+    try {
+      const res = await fetch(`/api/attendance/status/${userId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setAttendanceStatus(data.active);
+        setLastSession(data.last);
+        
+        if (data.active) {
+          const start = new Date(data.active.check_in).getTime();
+          const now = new Date().getTime();
+          setSessionDuration(Math.floor((now - start) / 60000));
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching attendance status:', err);
+    }
+  };
+
+  const handleMarkAttendance = async (scannedResult: string) => {
+    if (isScanning) return;
+    setIsScanning(true);
+    
+    console.log("🔍 QR Scanned:", scannedResult);
+    
+    try {
+      const endpoint = attendanceStatus ? '/api/attendance/check-out' : '/api/attendance/check-in';
+      console.log(`📡 Sending request to ${endpoint} for User ID: ${user.id}`);
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, qrKey: scannedResult.trim() })
+      });
+
+      const data = await res.json();
+      console.log("📥 Server Response:", data);
+
+      if (res.ok) {
+        await fetchAttendanceStatus(user.id);
+        stopScanner();
+        setIsScanModalOpen(false);
+        setIsScanning(false);
+        showNotification(
+          attendanceStatus ? "Check-out confirmed. Great session!" : "Check-in successful. Welcome to the gym!", 
+          "success"
+        );
+      } else {
+        console.error("❌ Attendance Logic Error:", data.message);
+        showNotification(data.message || "Attendance failed", "error");
+        setIsScanning(false); // Allow retry
+      }
+    } catch (err) {
+      console.error("❌ Network Error during attendance:", err);
+      showNotification("Network error. Please try again.", "error");
+      setIsScanning(false); // Allow retry
+    }
+  };
+
+  const stopScanner = async () => {
+    if (scannerRef.current) {
+      try {
+        if (scannerRef.current.isScanning) {
+          await scannerRef.current.stop();
+        }
+      } catch (err) {
+        console.error("Failed to stop scanner", err);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (isScanModalOpen) {
+      setCameraError(null);
+      const startCamera = async () => {
+        try {
+          await new Promise(resolve => setTimeout(resolve, 800));
+          const html5QrCode = new Html5Qrcode("qr-reader");
+          scannerRef.current = html5QrCode;
+
+          const config = { 
+            fps: 15, 
+            qrbox: { width: 250, height: 250 },
+            formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
+          };
+
+          await html5QrCode.start(
+            { facingMode: "environment" }, 
+            config, 
+            (decodedText) => {
+              if (!isScanning) {
+                html5QrCode.stop(); // Stop scanner immediately to prevent double scans
+                handleMarkAttendance(decodedText);
+              }
+            },
+            () => {} 
+          );
+        } catch (err: any) {
+          console.error("Camera Error:", err);
+          setCameraError("Camera access denied or not found. Please enable permissions.");
+        }
+      };
+      startCamera();
+    } else {
+      stopScanner();
+    }
+    return () => { stopScanner(); };
+  }, [isScanModalOpen]);
+
   const handleCalculateBmi = () => {
     const w = parseFloat(bmiInputs.weight);
     const h = parseFloat(bmiInputs.height) / 100;
@@ -143,7 +292,22 @@ export default function MemberDashboard() {
 
   return (
     <MemberLayout>
-      {/* --- QUICK BMI CALCULATOR MODAL --- */}
+      <AnimatePresence>
+        {notification && (
+          <motion.div 
+            initial={{ opacity: 0, y: -50, x: '-50%' }}
+            animate={{ opacity: 1, y: 20, x: '-50%' }}
+            exit={{ opacity: 0, y: -50, x: '-50%' }}
+            className={`fixed top-0 left-1/2 z-[200] px-6 py-4 rounded-2xl shadow-2xl border flex items-center gap-3 min-w-[300px] ${
+              notification.type === 'success' ? 'bg-white border-green-100 text-green-600' : 'bg-white border-red-100 text-red-600'
+            }`}
+          >
+            {notification.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+            <span className="font-black uppercase tracking-widest text-[10px]">{notification.message}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {isBmiModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
@@ -178,9 +342,56 @@ export default function MemberDashboard() {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {isScanModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="bg-white rounded-[3rem] p-10 max-w-sm w-full shadow-2xl relative overflow-hidden text-center">
+              <button onClick={() => setIsScanModalOpen(false)} className="absolute top-8 right-8 p-2 bg-slate-100 rounded-full hover:bg-red-50 transition-all text-slate-400"><X className="w-5 h-5" /></button>
+              
+              <div className="text-center mb-10">
+                <div className="w-20 h-20 bg-orange-100 rounded-[2rem] flex items-center justify-center mx-auto mb-6 text-orange-600 shadow-inner">
+                  {attendanceStatus ? <LogOut className="w-10 h-10" /> : <QrCode className="w-10 h-10" />}
+                </div>
+                <h3 className="text-3xl font-black uppercase italic tracking-tighter text-black leading-none">
+                  {attendanceStatus ? 'Check Out' : 'Scan Access'}
+                </h3>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">Verified Gym Entrance</p>
+              </div>
+
+              <div className="relative aspect-square bg-slate-900 rounded-[2.5rem] mb-10 overflow-hidden group">
+                <div id="qr-reader" className="w-full h-full overflow-hidden"></div>
+                {(isScanning || cameraError) && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-white bg-black/80 backdrop-blur-md z-20 p-8 text-center">
+                    {cameraError ? (
+                      <>
+                        <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
+                        <span className="text-[11px] font-black uppercase tracking-widest text-red-500 mb-2">Access Blocked</span>
+                        <p className="text-[9px] font-bold text-slate-300 leading-relaxed">{cameraError}</p>
+                      </>
+                    ) : (
+                      <>
+                        <Loader2 className="w-12 h-12 animate-spin text-orange-500 mb-4" />
+                        <span className="text-[10px] font-black uppercase tracking-[0.3em]">Verifying Access...</span>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+              <p className="text-slate-400 text-[9px] font-black uppercase tracking-widest text-center px-4 leading-relaxed">
+                {cameraError ? 'System Error' : `Scan the official gym QR code to ${attendanceStatus ? 'exit' : 'enter'}`}
+              </p>
+              <style>{`
+                #qr-reader { border: none !important; }
+                #qr-reader__scan_region { background: #000; }
+                #qr-reader__dashboard { display: none !important; }
+                #qr-reader video { object-fit: cover !important; width: 100% !important; height: 100% !important; border-radius: 2rem; }
+              `}</style>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <div className="min-h-screen bg-slate-50/50 -mt-10 pt-10 px-2 sm:px-0">
-        
-        {/* HEADER */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10">
           <div>
             <h1 className="text-4xl font-black text-slate-900 uppercase italic tracking-tighter">
@@ -188,13 +399,23 @@ export default function MemberDashboard() {
             </h1>
             <p className="text-slate-500 font-bold uppercase text-[10px] tracking-[0.2em] mt-1">Personal Performance Dashboard</p>
           </div>
-          <Link to="/member/ai-assistant" className="group flex items-center gap-3 bg-black text-white px-6 py-3.5 rounded-2xl font-black uppercase tracking-widest text-xs transition-all hover:bg-orange-600 shadow-xl shadow-black/10">
-            <Bot className="w-5 h-5 text-orange-500 group-hover:text-white" />
-            AI Fitness Coach
-          </Link>
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setIsScanModalOpen(true)}
+              className={`flex items-center gap-3 px-6 py-3.5 rounded-2xl font-black uppercase tracking-widest text-xs transition-all shadow-xl ${
+                attendanceStatus ? 'bg-red-50 text-red-600 border border-red-100 hover:bg-red-600 hover:text-white' : 'bg-white text-black border border-slate-200 hover:bg-slate-900 hover:text-white'
+              }`}
+            >
+              {attendanceStatus ? <LogOut className="w-5 h-5" /> : <Scan className="w-5 h-5" />}
+              {attendanceStatus ? 'Check Out' : 'Scan QR'}
+            </button>
+            <Link to="/member/ai-assistant" className="group flex items-center gap-3 bg-black text-white px-6 py-3.5 rounded-2xl font-black uppercase tracking-widest text-xs transition-all hover:bg-orange-600 shadow-xl shadow-black/10">
+              <Bot className="w-5 h-5 text-orange-500 group-hover:text-white" />
+              AI Fitness Coach
+            </Link>
+          </div>
         </div>
 
-        {/* SUBSCRIPTION CARD */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-10 bg-slate-900 rounded-[2.5rem] p-8 text-white relative overflow-hidden shadow-2xl border border-white/5">
           <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-8">
             <div className="flex items-center gap-6">
@@ -204,13 +425,30 @@ export default function MemberDashboard() {
               <div>
                 <div className="flex items-center gap-3 mb-2">
                   <div className="text-[10px] font-black text-orange-500 uppercase tracking-[0.3em]">Member Status</div>
-                  <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg uppercase tracking-widest border ${user?.subscription_status === 'active' ? 'text-green-500 border-green-500/30 bg-green-500/10' : 'text-slate-400 border-slate-700 bg-slate-800'}`}>
-                    {user?.subscription_status === 'active' ? 'Active' : 'None'}
+                  <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg uppercase tracking-widest border ${
+                    membership?.status === 'active' ? 'text-green-500 border-green-500/30 bg-green-500/10' : 
+                    membership?.status === 'grace_period' ? 'text-yellow-500 border-yellow-500/30 bg-yellow-500/10' :
+                    membership?.status === 'blocked' ? 'text-red-500 border-red-500/30 bg-red-500/10' :
+                    'text-slate-400 border-slate-700 bg-slate-800'
+                  }`}>
+                    {membership?.status || 'None'}
                   </span>
                 </div>
                 <h2 className="text-3xl font-black uppercase italic tracking-tighter text-white leading-none">
                   {user?.package_name || "Free Tier"} <span className="text-orange-500">Member</span>
                 </h2>
+                {membership && (
+                  <div className="mt-3 flex items-center gap-4">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                      Expires: <span className="text-white">{new Date(membership.expiry_date).toLocaleDateString()}</span>
+                    </p>
+                    {membership.balance_due > 0 && (
+                      <p className="text-[9px] font-bold text-red-400 uppercase tracking-widest animate-pulse">
+                        Balance: LKR {membership.balance_due}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             <Link to="/member/payments" className="w-full md:w-auto bg-white text-black px-10 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-orange-600 hover:text-white transition-all transform hover:scale-105 shadow-xl">
@@ -220,14 +458,12 @@ export default function MemberDashboard() {
           <div className="absolute -top-24 -right-24 w-80 h-80 bg-orange-600/10 rounded-full blur-[100px]" />
         </motion.div>
 
-        {/* METRICS GRID */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-12">
           <div className="bg-white p-7 rounded-[2rem] border border-slate-200 shadow-sm group">
             <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-900 mb-6 group-hover:bg-orange-600 group-hover:text-white transition-colors"><ClipboardList className="w-6 h-6" /></div>
             <div className="text-xl font-black text-slate-900 tracking-tighter mb-1 uppercase truncate">{activeWorkout || "Ready"}</div>
             <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Workout</div>
           </div>
-
           <div className="bg-white p-7 rounded-[2rem] border border-slate-200 shadow-sm group flex flex-col justify-between">
             <div>
               <div className="flex justify-between items-start mb-6">
@@ -235,33 +471,89 @@ export default function MemberDashboard() {
                 <button onClick={() => setIsBmiModalOpen(true)} className="p-2 bg-slate-50 text-slate-400 rounded-xl hover:bg-orange-100 hover:text-orange-600 transition-all"><Calculator className="w-4 h-4" /></button>
               </div>
               <div className="text-4xl font-black text-slate-900 tracking-tighter mb-1">
-                {user?.profile_data?.current_weight && user?.profile_data?.height ? 
-                  (user.profile_data.current_weight / ((user.profile_data.height / 100) ** 2)).toFixed(1) : '--'}
+                {user?.profile_data?.current_weight && user?.profile_data?.height ? (user.profile_data.current_weight / ((user.profile_data.height / 100) ** 2)).toFixed(1) : '--'}
               </div>
-              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Live Body Mass Index</div>
+              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Live BMI</div>
             </div>
           </div>
-
           <div className="bg-white p-7 rounded-[2rem] border border-slate-200 shadow-sm group">
             <div className="flex justify-between items-start mb-6">
               <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-900 group-hover:bg-orange-600 group-hover:text-white transition-colors"><Target className="w-6 h-6" /></div>
               <span className="text-xs font-black text-orange-600">Goal Match</span>
             </div>
-            <div className="text-xl font-black text-slate-900 tracking-tighter mb-1 uppercase truncate">
-              {user?.profile_data?.primary_goal || "No Goal Set"}
-            </div>
+            <div className="text-xl font-black text-slate-900 tracking-tighter mb-1 uppercase truncate">{user?.profile_data?.primary_goal || "No Goal Set"}</div>
             <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Athlete Strategy</div>
           </div>
-
           <div className="bg-white p-7 rounded-[2rem] border border-slate-200 shadow-sm group">
             <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-900 mb-6 group-hover:bg-orange-600 group-hover:text-white transition-colors"><Dumbbell className="w-6 h-6" /></div>
             <div className="text-4xl font-black text-slate-900 tracking-tighter mb-1">{user?.profile_data?.current_weight || '--'}<span className="text-lg text-slate-400 ml-1 font-bold">kg</span></div>
             <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Current Weight</div>
           </div>
+
+          <div className={`p-7 rounded-[2rem] border shadow-sm group relative overflow-hidden transition-all duration-500 ${
+            attendanceStatus 
+              ? 'bg-orange-600 border-orange-500 text-white' 
+              : 'bg-white border-slate-200 text-slate-900'
+          }`}>
+            <div className="flex justify-between items-start mb-6">
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${
+                attendanceStatus ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-900 group-hover:bg-orange-600 group-hover:text-white'
+              }`}>
+                {attendanceStatus ? <Activity className="w-6 h-6 animate-pulse" /> : <History className="w-6 h-6" />}
+              </div>
+              {attendanceStatus && (
+                <div className="text-[8px] font-black uppercase tracking-widest bg-white/20 px-2 py-1 rounded-lg">Live</div>
+              )}
+            </div>
+
+            {attendanceStatus ? (
+              <>
+                <div className="text-4xl font-black tracking-tighter mb-1">{sessionDuration}<span className="text-lg ml-1 opacity-60">m</span></div>
+                <div className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-4">Current Session</div>
+                <div className="space-y-1 border-t border-white/10 pt-4 mt-2">
+                   <div className="flex justify-between text-[9px] font-bold uppercase tracking-wider opacity-80">
+                      <span>Started At</span>
+                      <span>{new Date(attendanceStatus.check_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                   </div>
+                </div>
+                <div className="mt-4 h-1 bg-white/20 rounded-full overflow-hidden">
+                  <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min((sessionDuration / 90) * 100, 100)}%` }} className="h-full bg-white" />
+                </div>
+              </>
+            ) : lastSession && new Date(lastSession.attendance_date).toDateString() === new Date().toDateString() ? (
+              <>
+                <div className="text-3xl font-black tracking-tighter mb-1">{lastSession.duration_minutes}<span className="text-lg ml-1 text-orange-600">m</span></div>
+                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Today's Summary</div>
+                <div className="space-y-2 border-t border-slate-50 pt-4 mt-2">
+                   <div className="flex justify-between text-[9px] font-black uppercase tracking-wider text-slate-400">
+                      <span>In</span>
+                      <span className="text-slate-900">{new Date(lastSession.check_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                   </div>
+                   <div className="flex justify-between text-[9px] font-black uppercase tracking-wider text-slate-400">
+                      <span>Out</span>
+                      <span className="text-slate-900">{new Date(lastSession.check_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                   </div>
+                </div>
+              </>
+            ) : lastSession ? (
+              <>
+                <div className="text-3xl font-black tracking-tighter mb-1">{lastSession.duration_minutes}<span className="text-lg ml-1 text-slate-400 font-bold">m</span></div>
+                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Last Session</div>
+                <div className="mt-4 text-[9px] font-bold text-slate-400 uppercase flex justify-between">
+                  <span>{new Date(lastSession.attendance_date).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>
+                  <span className="text-slate-900">{lastSession.duration_minutes} mins</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-xl font-black tracking-tighter mb-1 uppercase">No Data</div>
+                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Start Training</div>
+              </>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-10">
-          {/* SCHEDULE */}
           <div className="lg:col-span-2 bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-8">
             <div className="flex justify-between items-center mb-8 px-2">
               <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Weekly Schedule</h3>
@@ -269,24 +561,33 @@ export default function MemberDashboard() {
                 View All <ArrowUpRight className="w-3 h-3" />
               </Link>
             </div>
-            
             <div className="space-y-4">
               {classes.length > 0 ? (
                 classes.map((cls, i) => {
                   const status = getClassStatus(cls.class_day, cls.class_time, cls.is_cancelled);
                   const StatusIcon = status.icon;
                   return (
-                    <motion.div key={i} whileHover={{ x: 10 }} className="flex items-center justify-between p-5 rounded-3xl bg-white border border-slate-100 hover:border-orange-300 transition-all">
-                      <div className="flex items-center gap-5">
-                        <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center text-orange-600 border border-slate-100 shadow-inner"><Calendar className="w-7 h-7" /></div>
-                        <div>
-                          <div className="font-black text-slate-900 uppercase tracking-tight text-lg">{cls.name}</div>
-                          <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-2"><span className="text-orange-600">{cls.trainer_name}</span> • {cls.class_time}</div>
+                    <motion.div key={i} whileHover={{ x: 5 }} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 sm:p-5 rounded-3xl bg-white border border-slate-100 hover:border-orange-300 transition-all gap-4">
+                      <div className="flex items-center gap-4 sm:gap-5">
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 bg-slate-50 rounded-2xl flex items-center justify-center text-orange-600 border border-slate-100 shadow-inner flex-shrink-0">
+                          <Calendar className="w-6 h-6 sm:w-7 sm:h-7" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-black text-slate-900 uppercase tracking-tight text-base sm:text-lg truncate">{cls.name}</div>
+                          <div className="text-[9px] sm:text-[10px] text-slate-500 font-bold uppercase tracking-widest flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span className="text-orange-600">{cls.trainer_name}</span> 
+                            <span className="hidden sm:inline">•</span> 
+                            <span>{cls.class_time}</span>
+                          </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-6">
-                        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${status.color}`}><StatusIcon className="w-3 h-3" /> {status.label}</div>
-                        <Link to="/member/classes" className="p-3 rounded-xl bg-slate-900 text-white hover:bg-orange-600 transition-all"><ChevronRight className="w-5 h-5" /></Link>
+                      <div className="flex items-center justify-between w-full sm:w-auto gap-4 border-t sm:border-t-0 pt-3 sm:pt-0">
+                        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[8px] sm:text-[9px] font-black uppercase tracking-widest border ${status.color}`}>
+                          <StatusIcon className="w-3 h-3" /> {status.label}
+                        </div>
+                        <Link to="/member/classes" className="p-2 sm:p-3 rounded-xl bg-slate-900 text-white hover:bg-orange-600 transition-all">
+                          <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
+                        </Link>
                       </div>
                     </motion.div>
                   );
@@ -297,7 +598,6 @@ export default function MemberDashboard() {
             </div>
           </div>
 
-          {/* AI COACH CARD */}
           <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-8 flex flex-col relative overflow-hidden group">
             <div className="flex items-center gap-4 mb-6">
               <div className="w-14 h-14 bg-orange-100 rounded-2xl flex items-center justify-center text-orange-600 shadow-inner"><Bot className="w-8 h-8" /></div>
@@ -309,28 +609,22 @@ export default function MemberDashboard() {
                 </div>
               </div>
             </div>
-            
             <div className="flex-1">
               <div className="relative p-5 rounded-2xl bg-slate-50 border border-slate-100 mb-6 h-36 overflow-hidden">
                 <div className="flex items-center gap-2 mb-2 opacity-50">
                   <MessageSquare className="w-3 h-3 text-orange-600" />
                   <span className="text-[9px] font-black uppercase tracking-widest">Latest Insight {lastAiTime && `• ${lastAiTime}`}</span>
                 </div>
-                <p className="text-slate-600 text-[11px] leading-relaxed font-bold italic">
-                  "{lastAiMessage}"
-                </p>
+                <p className="text-slate-600 text-[11px] leading-relaxed font-bold italic">"{lastAiMessage}"</p>
                 <div className="absolute bottom-0 left-0 w-full h-12 bg-gradient-to-t from-slate-50 to-transparent" />
               </div>
             </div>
-
             <Link to="/member/ai-assistant" className="w-full py-5 bg-black text-white rounded-2xl font-black uppercase tracking-widest text-xs text-center hover:bg-orange-600 transition-all shadow-xl active:scale-95 flex items-center justify-center gap-2">
               Continue Coaching <ChevronRight className="w-4 h-4" />
             </Link>
-            
             <TrendingUp className="absolute -top-10 -right-10 w-40 h-40 text-slate-50 -rotate-12" />
           </div>
         </div>
-
         <div className="py-10 text-center">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Narrow Fitness System v1.0 • Sri Lanka</p>
         </div>

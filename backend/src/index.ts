@@ -13,15 +13,21 @@ import bcrypt from "bcryptjs";
 
 // 1. DETERMINE ENVIRONMENT
 const dbUrl = process.env.DATABASE_URL || "";
-const isLocal = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
+// Expanded local detection to include Docker host gateway
+const isLocal = dbUrl.includes('localhost') || 
+                dbUrl.includes('127.0.0.1') || 
+                dbUrl.includes('@db:') || 
+                dbUrl.includes('host.docker.internal');
 
 // 2. CREATE CONFIG DYNAMICALLY
 const poolConfig: any = {
   connectionString: dbUrl,
 };
 
-// ONLY add SSL if we are NOT on localhost (for Neon Cloud)
-if (!isLocal) {
+// Explicit SSL toggle from .env (optional) or auto-detect
+const useSSL = process.env.DB_SSL === 'true' || (!isLocal && process.env.DB_SSL !== 'false');
+
+if (useSSL) {
   poolConfig.ssl = {
     rejectUnauthorized: false
   };
@@ -50,6 +56,10 @@ pool.query('SELECT NOW()', (err, res) => {
 import adminRouter from "./routes/adminRoutes.js";
 import memberRouter from "./routes/memberRoutes.js";
 import aiRouter from "./routes/aiAssistantRoutes.js";
+import attendanceRouter from "./routes/attendanceRoutes.js";
+import paymentRouter from "./routes/paymentRoutes.js";
+import { sendWhatsAppMessage } from './services/notificationService.js';
+
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
@@ -62,6 +72,56 @@ transporter.verify((error) => {
   if (error) console.log("❌ Mail Server Error:", error);
   else console.log("📧 Mail Server Ready: Class Notification");
 });
+
+// --- MEMBERSHIP LIFECYCLE TASK (Daily at Midnight) ---
+setInterval(async () => {
+  const now = new Date();
+  if (now.getHours() === 0 && now.getMinutes() === 0) {
+    console.log("🕒 Running Daily Membership Lifecycle Task...");
+    try {
+      // 1. Mark 'grace_period' for memberships expiring today
+      await query(`
+        UPDATE memberships 
+        SET status = 'grace_period' 
+        WHERE expiry_date <= CURRENT_DATE AND status = 'active'
+      `);
+
+      // 2. Mark 'blocked' for memberships in grace_period for > 10 days
+      // Actually, it's easier to check against expiry_date
+      await query(`
+        UPDATE memberships 
+        SET status = 'blocked' 
+        WHERE expiry_date < CURRENT_DATE - INTERVAL '10 days' AND status != 'blocked'
+      `);
+
+      // 3. Automated Reminders (5 days before expiry)
+      const reminders = await query(`
+        SELECT u.email, u.name, m.expiry_date
+        FROM memberships m
+        JOIN users u ON m.userid = u.id
+        WHERE m.expiry_date = CURRENT_DATE + INTERVAL '5 days' AND m.status = 'active'
+      `);
+
+      for (const r of reminders.rows) {
+        await sendWhatsAppMessage("PHONE_NUMBER", `Hi ${r.name}, your Narrow Fitness membership expires in 5 days (${new Date(r.expiry_date).toLocaleDateString()}). Please renew to avoid service interruption.`);
+      }
+
+      // 4. Block Alerts
+      const blockAlerts = await query(`
+        SELECT u.email, u.name
+        FROM memberships m
+        JOIN users u ON m.userid = u.id
+        WHERE m.expiry_date = CURRENT_DATE - INTERVAL '11 days' AND m.status = 'blocked'
+      `);
+      for (const a of blockAlerts.rows) {
+        await sendWhatsAppMessage("PHONE_NUMBER", `Hi ${a.name}, your account has been blocked due to non-payment. Please contact admin.`);
+      }
+
+    } catch (err: any) {
+      console.error("❌ Membership Task Error:", err.message);
+    }
+  }
+}, 60000); // Check every minute
 
 // --- 🔎 0. PRE-FLIGHT ENVIRONMENT DEBUGGER ---
 const verifyEnvironment = () => {
@@ -94,6 +154,43 @@ const JWT_SECRET = process.env.JWT_SECRET || "narrow_fitness_secret_key_123";
 const DATABASE_URL = process.env.DATABASE_URL;
 
 // --- 3. APP & HTTP SERVER SETUP ---
+// --- ATTENDANCE AUTO-CHECKOUT TASK (Every 15 Minutes) ---
+setInterval(async () => {
+  try {
+    const FIVE_HOURS_AGO = new Date(Date.now() - 5 * 60 * 60 * 1000);
+    
+    // Find sessions older than 5 hours that are still 'in-gym'
+    const staleSessions = await query(
+      "SELECT id, check_in FROM attendance WHERE status = 'in-gym' AND check_in < $1",
+      [FIVE_HOURS_AGO]
+    );
+
+    if (staleSessions.rows.length > 0) {
+      console.log(`🧹 System: Auto-checking out ${staleSessions.rows.length} stale sessions...`);
+      
+      for (const session of staleSessions.rows) {
+        const checkIn = new Date(session.check_in);
+        const checkOut = new Date(checkIn.getTime() + 2 * 60 * 60 * 1000); // Set checkout to 2 hours after checkin as a sensible default
+        const duration = 120; // 2 hours
+
+        await query(
+          `UPDATE attendance 
+           SET check_out = $1, 
+               duration_minutes = $2, 
+               status = 'completed'
+           WHERE id = $3`,
+          [checkOut, duration, session.id]
+        );
+      }
+      
+      // Notify admin dashboard if socket is available
+      // Note: In a real app, you'd use the 'io' instance defined later
+    }
+  } catch (err: any) {
+    console.error("❌ Auto-Checkout Task Error:", err.message);
+  }
+}, 15 * 60 * 1000);
+
 const app = express();
 const server = http.createServer(app);
 
@@ -181,6 +278,8 @@ app.get("/api/public/stats", async (req, res) => {
 app.use("/api/admin", adminRouter);
 app.use("/api/member/ai", aiRouter);
 app.use("/api/member", memberRouter);
+app.use("/api/attendance", attendanceRouter);
+app.use("/api/payments", paymentRouter);
 app.use("/api", memberRouter);
 
 
@@ -197,6 +296,102 @@ const initDB = async () => {
     await query(`CREATE TABLE IF NOT EXISTS ai_usage (userid INT PRIMARY KEY, daily_count INT DEFAULT 0, last_reset DATE DEFAULT CURRENT_DATE);`);
     await query(`CREATE TABLE IF NOT EXISTS chat_history (id SERIAL PRIMARY KEY, userid INT, role VARCHAR(20), message TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
     
+    // Attendance Tables
+    await query(`
+      CREATE TABLE IF NOT EXISTS attendance_configs (
+        id SERIAL PRIMARY KEY,
+        qr_key VARCHAR(255) UNIQUE NOT NULL,
+        location_name VARCHAR(100) DEFAULT 'Main Entrance',
+        is_active BOOLEAN DEFAULT TRUE,
+        last_rotated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Ensure at least one default config exists
+    const configCheck = await query("SELECT id FROM attendance_configs LIMIT 1");
+    if (configCheck.rows.length === 0) {
+      await query("INSERT INTO attendance_configs (qr_key) VALUES ('narrow-fitness-checkin-key-2026')");
+    }
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS attendance (
+        id SERIAL PRIMARY KEY,
+        userid INTEGER NOT NULL,
+        attendance_date DATE NOT NULL DEFAULT CURRENT_DATE,
+        check_in TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        check_out TIMESTAMP WITH TIME ZONE,
+        duration_minutes INTEGER,
+        status VARCHAR(20) DEFAULT 'in-gym',
+        CONSTRAINT fk_user FOREIGN KEY(userid) REFERENCES users(id) ON DELETE CASCADE
+      );
+    `);
+
+    // Pricing & Memberships
+    await query(`
+      CREATE TABLE IF NOT EXISTS pricing (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        price DECIMAL(10, 2) NOT NULL,
+        duration VARCHAR(50) DEFAULT 'Month',
+        features TEXT[] DEFAULT '{}',
+        is_popular BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Ensure default pricing plans exist
+    const pricingCheck = await query("SELECT id FROM pricing LIMIT 1");
+    if (pricingCheck.rows.length === 0) {
+      await query(`
+        INSERT INTO pricing (name, price, duration, features, is_popular) VALUES 
+        ('Standard', 2500, 'Month', '{"Basic Gym Access", "Locker Room Access", "Daily 1 Hour Training"}', FALSE),
+        ('Premium', 5000, 'Month', '{"Full Gym Access", "AI Coach Access", "Personalized Workout Plans", "Yoga & Cardio Classes"}', TRUE),
+        ('Elite', 12000, '3 Months', '{"All Premium Features", "Nutrition Coaching", "Priority Support", "Narrow Fitness Merchandise"}', FALSE)
+      `);
+      console.log("📦 DATABASE: Default Pricing Plans Inserted.");
+    }
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS activation_codes (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(255) UNIQUE NOT NULL,
+        package_id INTEGER REFERENCES pricing(id) ON DELETE CASCADE,
+        is_used BOOLEAN DEFAULT FALSE,
+        used_by INTEGER REFERENCES users(id),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS payments (
+        id SERIAL PRIMARY KEY,
+        userid INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        package_id INTEGER REFERENCES pricing(id),
+        amount_paid DECIMAL(10, 2) NOT NULL,
+        balance_due DECIMAL(10, 2) DEFAULT 0.00,
+        payment_method VARCHAR(20) NOT NULL,
+        status VARCHAR(20) DEFAULT 'pending',
+        source VARCHAR(50) DEFAULT 'app',
+        payhere_payment_id VARCHAR(100),
+        receipt_url TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS memberships (
+        id SERIAL PRIMARY KEY,
+        userid INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+        package_id INTEGER REFERENCES pricing(id),
+        last_payment_id INTEGER REFERENCES payments(id),
+        start_date DATE NOT NULL,
+        expiry_date DATE NOT NULL,
+        status VARCHAR(20) DEFAULT 'active',
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
     console.log("📦 DATABASE: All Tables Verified & Initialized.");
   } catch (err) {
     console.error("❌ DATABASE: Startup Error:", err);

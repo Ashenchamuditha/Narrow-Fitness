@@ -97,6 +97,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     { id: 'members', name: 'Members', icon: Users, path: '/admin/members' },
     { id: 'trainers', name: 'Trainers', icon: UserPlus, path: '/admin/trainers' },
     { id: 'classes', name: 'Classes', icon: Calendar, path: '/admin/classes' },
+    { id: 'attendance', name: 'Attendance', icon: Clock, path: '/admin/attendance' },
     { id: 'pricing', name: 'Pricing', icon: Tag, path: '/admin/pricing' },
     { id: 'inquiries', name: 'Inquiries', icon: MessageSquare, path: '/admin/inquiries' }, 
     { id: 'gallery', name: 'Gallery', icon: ImageIcon, path: '/admin/gallery' },    

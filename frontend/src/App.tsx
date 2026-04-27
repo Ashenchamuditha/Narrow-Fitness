@@ -26,6 +26,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import AdminTrainers from './pages/AdminTrainers';
 import AdminMembers from './pages/AdminMembers';
 import AdminClasses from './pages/AdminClasses';
+import AdminAttendance from './pages/AdminAttendance';
 import AdminPricing from './pages/AdminPricing';
 import AdminPayments from './pages/AdminPayments';
 import AdminSettings from './pages/AdminSettings';
@@ -38,6 +39,7 @@ import PricingPage from './pages/PricingPage';
 import ContactPage from './pages/ContactPage';
 import ClassesPage from './pages/ClassesPage';
 import LegalPage from './pages/LegalPage';
+import WallPayment from './pages/WallPayment';
 
 // --- 1. PROTECTED ROUTE COMPONENT ---
 const ProtectedRoute = ({ children, adminOnly = false }: { children: React.ReactNode; adminOnly?: boolean }) => {
@@ -142,6 +144,8 @@ export default function App() {
         <Route path="/terms" element={<LegalPage type="terms" />} />
         <Route path="/cookies" element={<LegalPage type="cookies" />} /> 
 
+        <Route path="/wall-pay" element={<WallPayment />} />
+
         {/* Member Registration (Onboarding) - Standalone */}
         <Route path="/member/onboarding" element={<MemberOnboarding />} />
 
@@ -159,6 +163,7 @@ export default function App() {
         <Route path="/admin/trainers" element={<ProtectedRoute adminOnly={true}><AdminTrainers /></ProtectedRoute>} />
         <Route path="/admin/members" element={<ProtectedRoute adminOnly={true}><AdminMembers /></ProtectedRoute>} />
         <Route path="/admin/classes" element={<ProtectedRoute adminOnly={true}><AdminClasses /></ProtectedRoute>} />
+        <Route path="/admin/attendance" element={<ProtectedRoute adminOnly={true}><AdminAttendance /></ProtectedRoute>} />
         <Route path="/admin/pricing" element={<ProtectedRoute adminOnly={true}><AdminPricing /></ProtectedRoute>} />
         <Route path="/admin/payments" element={<ProtectedRoute adminOnly={true}><AdminPayments /></ProtectedRoute>} />
         <Route path="/admin/settings" element={<ProtectedRoute adminOnly={true}><AdminSettings /></ProtectedRoute>} />

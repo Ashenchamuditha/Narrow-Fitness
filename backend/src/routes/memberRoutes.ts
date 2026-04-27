@@ -582,6 +582,28 @@ memberRouter.post("/activate-plan", async (req, res) => {
       [planId, userId]
     );
 
+    // Update Memberships Table
+    const pkgRes = await query("SELECT duration FROM pricing WHERE id = $1", [planId]);
+    const duration = pkgRes.rows[0].duration;
+    
+    // Calculate Expiry
+    const expiry = new Date();
+    if (duration === 'Month') expiry.setMonth(expiry.getMonth() + 1);
+    else if (duration === '3 Months') expiry.setMonth(expiry.getMonth() + 3);
+    else if (duration === 'Year') expiry.setFullYear(expiry.getFullYear() + 1);
+    else expiry.setMonth(expiry.getMonth() + 1);
+
+    await query(
+      `INSERT INTO memberships (userid, package_id, start_date, expiry_date, status)
+       VALUES ($1, $2, CURRENT_DATE, $3, 'active')
+       ON CONFLICT (userid) DO UPDATE SET
+         package_id = EXCLUDED.package_id,
+         expiry_date = EXCLUDED.expiry_date,
+         status = 'active',
+         updated_at = CURRENT_TIMESTAMP`,
+      [userId, planId, expiry]
+    );
+
     // D. SEND ACTIVATION EMAIL
     const mailOptions = {
       from: `"Narrow Fitness" <${process.env.EMAIL_USER}>`,
@@ -716,6 +738,35 @@ memberRouter.post("/classes/join", async (req, res) => {
   io.emit("silent_admin_refresh"); 
 
   res.status(200).json({ success: true });
+});
+
+// --- GET PERSONAL PAYMENT HISTORY ---
+memberRouter.get("/payments/:userId", async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const result = await query(`
+      SELECT p.*, pr.name as package_name
+      FROM payments p
+      JOIN pricing pr ON p.package_id = pr.id
+      WHERE p.userid = $1
+      ORDER BY p.created_at DESC
+    `, [userId]);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ message: "Error fetching payment history" });
+  }
+});
+
+// --- GET MEMBERSHIP STATUS ---
+memberRouter.get("/membership/:userId", async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const result = await query("SELECT * FROM memberships WHERE userid = $1", [userId]);
+    if (result.rows.length === 0) return res.json({ status: 'inactive' });
+    res.json(result.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ message: "Error fetching membership" });
+  }
 });
 
 export default memberRouter;

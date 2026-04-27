@@ -893,4 +893,30 @@ adminRouter.post("/broadcast-email", async (req, res) => {
     res.status(500).json({ message: "Could not initiate broadcast. Check server logs." });
   }
 });
+// --- ADMIN: PAYMENTS & MEMBERS ---
+
+adminRouter.get("/payments", async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT p.*, u.name as member_name, u.email as member_email, pr.name as package_name
+      FROM payments p
+      JOIN users u ON p.userid = u.id
+      JOIN pricing pr ON p.package_id = pr.id
+      ORDER BY p.created_at DESC
+    `);
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ message: "Error fetching payments" });
+  }
+});
+
+adminRouter.get("/members", async (req, res) => {
+  try {
+    const result = await query("SELECT id, name, email FROM users WHERE role = 'user' ORDER BY name ASC");
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ message: "Error fetching members" });
+  }
+});
+
 export default adminRouter;

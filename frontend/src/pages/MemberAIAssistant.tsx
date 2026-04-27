@@ -10,6 +10,17 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+interface Attachment {
+  id?: string;
+  name: string;
+  type: string;
+  preview?: string;
+  base64?: string;
+  file?: File;
+  extractedText?: string;
+  icon?: any;
+}
+
 // --- ELITE UI COMPONENTS ---
 
 const ChatMessages = memo(({ messages }: { messages: any[] }) => (

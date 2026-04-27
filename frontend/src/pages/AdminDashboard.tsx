@@ -293,6 +293,13 @@ export default function AdminDashboard() {
           <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8">
             <h3 className="text-xl font-black text-slate-900 uppercase italic tracking-tighter mb-6 flex items-center gap-2"><Settings className="w-5 h-5 text-orange-600" /> Fast Config</h3>
             <div className="space-y-3">
+               <Link to="/admin/payments" className="w-full flex items-center justify-between p-4 rounded-2xl bg-black text-white hover:bg-orange-600 transition-all group shadow-lg">
+                  <div className="flex items-center gap-3">
+                     <Clock className="w-4 h-4 text-orange-500" />
+                     <span className="text-[10px] font-black uppercase tracking-widest">Payments & Cash</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 opacity-50" />
+               </Link>
                <button onClick={() => { setSendSuccess(false); setIsBroadcastOpen(true); }} className="w-full flex items-center justify-between p-4 rounded-2xl bg-orange-600 text-white hover:bg-black transition-all group shadow-lg shadow-orange-100">
                   <div className="flex items-center gap-3">
                      <Megaphone className="w-4 h-4 text-white" />

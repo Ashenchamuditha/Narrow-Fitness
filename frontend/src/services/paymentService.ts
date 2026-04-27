@@ -1,12 +1,18 @@
-export interface PayHereParams {
+import axios from 'axios';
+
+const API_URL = '/api';
+
+export interface PayHerePayment {
+  sandbox: boolean;
   merchant_id: string;
   return_url: string;
   cancel_url: string;
   notify_url: string;
   order_id: string;
   items: string;
+  amount: string;
   currency: string;
-  amount: number;
+  hash: string;
   first_name: string;
   last_name: string;
   email: string;
@@ -14,38 +20,76 @@ export interface PayHereParams {
   address: string;
   city: string;
   country: string;
-  hash: string;
+  custom_1: string; // userId
+  custom_2: string; // packageId
 }
 
-export const generatePayHereHash = (
-  merchantId: string,
-  orderId: string,
-  amount: number,
-  currency: string,
-  merchantSecret: string
-) => {
-  // This should ideally be done on the server to keep the secret hidden
-  // But for this demo, we'll show how it's calculated
-  // Hash = UpperCase(Md5(MerchantID + OrderID + Amount + Currency + UpperCase(Md5(MerchantSecret))))
-  
-  // Note: We'd need an MD5 library here. For now, this is a placeholder.
-  return "GENERATED_HASH";
+declare const payhere: any;
+
+export const startPayment = async (userId: number, pkg: any, user: any) => {
+  try {
+    const orderId = `ORDER_${Date.now()}`;
+    const amount = pkg.price;
+    const currency = 'LKR';
+
+    // 1. Get Hash from Backend
+    const hashRes = await axios.post(`${API_URL}/payments/payhere/hash`, {
+      order_id: orderId,
+      amount,
+      currency
+    });
+
+    const payment: PayHerePayment = {
+      sandbox: true, // Set to false for production
+      merchant_id: '1211149', // Replace with your Merchant ID
+      return_url: 'http://localhost:3000/member/payments?status=success',
+      cancel_url: 'http://localhost:3000/member/payments?status=cancel',
+      notify_url: `${API_URL}/payments/payhere/notify`,
+      order_id: orderId,
+      items: pkg.name,
+      amount: amount.toString(),
+      currency: currency,
+      hash: hashRes.data.hash,
+      first_name: user.name.split(' ')[0],
+      last_name: user.name.split(' ')[1] || 'User',
+      email: user.email,
+      phone: '0771234567',
+      address: 'Narrow Fitness Gym',
+      city: 'Colombo',
+      country: 'Sri Lanka',
+      custom_1: userId.toString(),
+      custom_2: pkg.id.toString()
+    };
+
+    payhere.onCompleted = function(orderId: string) {
+      console.log("Payment completed. OrderID:" + orderId);
+      window.location.href = '/member/payments?status=completed';
+    };
+
+    payhere.onDismissed = function() {
+      console.log("Payment dismissed");
+    };
+
+    payhere.onError = function(error: string) {
+      console.log("Error:"  + error);
+    };
+
+    payhere.startPayment(payment);
+
+  } catch (error) {
+    console.error("Payment Error:", error);
+    alert("Could not initiate payment. Please try again.");
+  }
 };
 
-export const initiatePayHerePayment = (params: PayHereParams) => {
-  const form = document.createElement('form');
-  form.method = 'POST';
-  form.action = 'https://sandbox.payhere.lk/pay/checkout'; // Use sandbox for testing
-
-  Object.entries(params).forEach(([key, value]) => {
-    const input = document.createElement('input');
-    input.type = 'hidden';
-    input.name = key;
-    input.value = value.toString();
-    form.appendChild(input);
+export const recordCashPayment = async (userId: number, packageId: number, amountPaid: number) => {
+  return axios.post(`${API_URL}/payments/manual-cash`, {
+    userId,
+    packageId,
+    amountPaid
   });
+};
 
-  document.body.appendChild(form);
-  form.submit();
-  document.body.removeChild(form);
+export const identifyWallQRUser = async (email: string) => {
+  return axios.post(`${API_URL}/payments/wall-qr/identify`, { email });
 };

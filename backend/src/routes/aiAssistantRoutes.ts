@@ -59,14 +59,6 @@ aiRouter.get("/sessions/:userId", async (req, res) => {
   } catch (err) { res.status(500).json({ message: "failed to load sessions" }); }
 });
 
-aiRouter.post("/sessions/new", async (req, res) => {
-  const { userId, title } = req.body;
-  try {
-    const result = await query("INSERT INTO chat_sessions (userid, title) VALUES ($1, $2) RETURNING *", [userId, title || 'new workout chat']);
-    res.status(201).json(result.rows[0]);
-  } catch (err) { res.status(500).json({ message: "failed to create session" }); }
-});
-
 aiRouter.get("/history/:sessionId", async (req, res) => {
   const sid = Number(req.params.sessionId);
   try {
@@ -187,6 +179,12 @@ aiRouter.post("/chat", async (req, res) => {
   const currentDateTime = new Date().toLocaleString('en-US', { timeZone: 'Asia/Colombo' });
 
   try {
+    // Check Membership Status
+    const memberRes = await query("SELECT status FROM memberships WHERE userid = $1", [uid]);
+    if (memberRes.rows.length > 0 && memberRes.rows[0].status === 'blocked') {
+      return res.status(403).json({ message: "Your account is blocked. Please renew your membership to use the AI Assistant." });
+    }
+
     const dataRes = await query(`
       SELECT 
         u.id AS user_db_id, 
