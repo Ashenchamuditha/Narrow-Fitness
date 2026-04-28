@@ -44,6 +44,8 @@ export default function MemberPayments() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('status') === 'completed' || params.get('status') === 'success') {
       setShowSuccessPopup(true);
+      // Clean up URL to prevent popup on refresh
+      window.history.replaceState({}, document.title, window.location.pathname);
     }
 
     const storedUser = localStorage.getItem('narrow_fitness_user');
@@ -55,6 +57,29 @@ export default function MemberPayments() {
     }
     fetchPricingPlans();
   }, []);
+
+  // Auto-select user's current plan once plans and user/membership are loaded
+  useEffect(() => {
+    if (plans.length > 0) {
+      // Prioritize live membership data, fallback to user object
+      const currentPackageId = membership?.package_id || user?.package_id;
+      
+      if (currentPackageId) {
+        const currentPlan = plans.find(p => p.id === Number(currentPackageId));
+        if (currentPlan) {
+          setSelectedPlan(currentPlan);
+        } else {
+          // Default to popular if current not found in list
+          const popular = plans.find((p: PricingPlan) => p.is_popular);
+          if (popular) setSelectedPlan(popular);
+        }
+      } else {
+        // Default to popular if no package registered
+        const popular = plans.find((p: PricingPlan) => p.is_popular);
+        if (popular) setSelectedPlan(popular);
+      }
+    }
+  }, [plans, membership, user]);
 
   const fetchMembership = async (userId: number) => {
     try {
@@ -129,8 +154,8 @@ export default function MemberPayments() {
     }
   };
 
-  const isActive = user?.subscription_status === 'active';
-  const displayPackageName = plans.find(p => p.id === user?.package_id)?.name || user?.package_name || "None Selected";
+  const isActive = user?.subscription_status === 'active' || membership?.status === 'active';
+  const displayPackageName = plans.find(p => p.id === (membership?.package_id || user?.package_id))?.name || user?.package_name || "None Selected";
 
   return (
     <MemberLayout>
@@ -146,20 +171,21 @@ export default function MemberPayments() {
               
               <div className="space-y-3">
                 {lastPaymentId && (
-                  <a 
-                    href={`/api/payments/receipt/${lastPaymentId}`}
-                    target="_blank"
-                    rel="noreferrer"
+                  <button 
+                    onClick={() => {
+                      window.open(`/api/payments/receipt/${lastPaymentId}`, '_blank');
+                      window.location.href = '/member/payments';
+                    }}
                     className="w-full py-4 bg-black text-white rounded-2xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 hover:bg-orange-600 transition-all shadow-xl"
                   >
                     <Download className="w-4 h-4" /> View & Download Receipt
-                  </a>
+                  </button>
                 )}
                 <button 
                   onClick={() => { setShowSuccessPopup(false); window.location.href = '/member/payments'; }}
                   className="w-full py-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-200 transition-all"
                 >
-                  Close Dashboard
+                  Close & Refresh Dashboard
                 </button>
               </div>
             </motion.div>

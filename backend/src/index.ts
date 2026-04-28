@@ -73,53 +73,50 @@ transporter.verify((error) => {
   else console.log("📧 Mail Server Ready: Class Notification");
 });
 
-// --- MEMBERSHIP LIFECYCLE TASK (Daily at Midnight) ---
+// --- MEMBERSHIP LIFECYCLE TASK ---
 setInterval(async () => {
-  const now = new Date();
-  if (now.getHours() === 0 && now.getMinutes() === 0) {
-    console.log("🕒 Running Daily Membership Lifecycle Task...");
-    try {
-      // 1. Mark 'grace_period' for memberships expiring today
-      await query(`
-        UPDATE memberships 
-        SET status = 'grace_period' 
-        WHERE expiry_date <= CURRENT_DATE AND status = 'active'
-      `);
+  try {
+    // 1. Move to Grace Period (Days 1 to 10 after expiry)
+    const graceRes = await query(`
+      UPDATE memberships 
+      SET status = 'grace_period' 
+      WHERE expiry_date < CURRENT_DATE 
+      AND expiry_date >= CURRENT_DATE - INTERVAL '10 days'
+      AND status = 'active'
+      RETURNING userid
+    `);
 
-      // 2. Mark 'blocked' for memberships in grace_period for > 10 days
-      // Actually, it's easier to check against expiry_date
-      await query(`
-        UPDATE memberships 
-        SET status = 'blocked' 
-        WHERE expiry_date < CURRENT_DATE - INTERVAL '10 days' AND status != 'blocked'
-      `);
+    // 2. Move to Blocked (Day 11+)
+    const blockRes = await query(`
+      UPDATE memberships 
+      SET status = 'blocked' 
+      WHERE expiry_date < CURRENT_DATE - INTERVAL '10 days' 
+      AND status != 'blocked'
+      RETURNING userid
+    `);
 
-      // 3. Automated Reminders (5 days before expiry)
-      const reminders = await query(`
-        SELECT u.email, u.name, m.expiry_date
-        FROM memberships m
-        JOIN users u ON m.userid = u.id
-        WHERE m.expiry_date = CURRENT_DATE + INTERVAL '5 days' AND m.status = 'active'
-      `);
+    // 3. FETCH CURRENT SUMMARY FOR CONSOLE
+    const stats = await query(`
+      SELECT status, COUNT(*) as count 
+      FROM memberships 
+      GROUP BY status
+    `);
+    
+    const summary = stats.rows.reduce((acc: any, row: any) => {
+      acc[row.status] = row.count;
+      return acc;
+    }, { active: 0, grace_period: 0, blocked: 0 });
 
-      for (const r of reminders.rows) {
-        await sendWhatsAppMessage("PHONE_NUMBER", `Hi ${r.name}, your Narrow Fitness membership expires in 5 days (${new Date(r.expiry_date).toLocaleDateString()}). Please renew to avoid service interruption.`);
-      }
+    console.log(`\n[${new Date().toLocaleTimeString()}] 📊 MEMBERSHIP HEARTBEAT:`);
+    console.log(`   ✅ Active: ${summary.active}`);
+    console.log(`   ⚠️  Grace:  ${summary.grace_period}`);
+    console.log(`   🚫 Blocked: ${summary.blocked}`);
+    
+    if (graceRes.rowCount && graceRes.rowCount > 0) console.log(`   ✨ New Transitions: ${graceRes.rowCount} moved to Grace`);
+    if (blockRes.rowCount && blockRes.rowCount > 0) console.log(`   🚨 New Transitions: ${blockRes.rowCount} moved to Blocked`);
 
-      // 4. Block Alerts
-      const blockAlerts = await query(`
-        SELECT u.email, u.name
-        FROM memberships m
-        JOIN users u ON m.userid = u.id
-        WHERE m.expiry_date = CURRENT_DATE - INTERVAL '11 days' AND m.status = 'blocked'
-      `);
-      for (const a of blockAlerts.rows) {
-        await sendWhatsAppMessage("PHONE_NUMBER", `Hi ${a.name}, your account has been blocked due to non-payment. Please contact admin.`);
-      }
-
-    } catch (err: any) {
-      console.error("❌ Membership Task Error:", err.message);
-    }
+  } catch (err: any) {
+    console.error("❌ [LIFECYCLE ERROR]:", err.message);
   }
 }, 60000); // Check every minute
 
@@ -224,9 +221,6 @@ app.use((req, res, next) => {
 // --- 2. ROUTE DEFINITIONS ---
 const PORT = Number(process.env.PORT) || 5000;
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server ready at http://localhost:${PORT}`);
-});
 // Inside api/index.ts
 
 
@@ -292,7 +286,12 @@ const initDB = async () => {
   try {
     // Basic User & Profile Tables
     await query(`CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, name VARCHAR(255), email VARCHAR(255) UNIQUE, password VARCHAR(255), role VARCHAR(50) DEFAULT 'user', is_profile_complete BOOLEAN DEFAULT FALSE, profile_image TEXT, package_id INT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
-    await query(`CREATE TABLE IF NOT EXISTS memberprofiles (userid INT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, primary_goal VARCHAR(50), current_weight DECIMAL, height DECIMAL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
+    await query(`CREATE TABLE IF NOT EXISTS memberprofiles (userid INT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, primary_goal VARCHAR(50), current_weight DECIMAL, height DECIMAL, package VARCHAR(100), updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
+    
+    // Ensure column exists for existing tables
+    try {
+      await query("ALTER TABLE memberprofiles ADD COLUMN IF NOT EXISTS package VARCHAR(100)");
+    } catch (e) { /* ignore */ }
     await query(`CREATE TABLE IF NOT EXISTS trainers (id SERIAL PRIMARY KEY, name VARCHAR(255), description TEXT, image_url TEXT, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);`);
     
     // AI Persistence Tables
@@ -377,10 +376,18 @@ const initDB = async () => {
         status VARCHAR(20) DEFAULT 'pending',
         source VARCHAR(50) DEFAULT 'app',
         payhere_payment_id VARCHAR(100),
+        card_holder_name VARCHAR(255),
+        card_no VARCHAR(50),
         receipt_url TEXT,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+    // Ensure columns exist for existing tables
+    try {
+      await query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS card_holder_name VARCHAR(255)");
+      await query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS card_no VARCHAR(50)");
+    } catch (e) { /* ignore */ }
 
     await query(`
       CREATE TABLE IF NOT EXISTS memberships (
@@ -391,9 +398,15 @@ const initDB = async () => {
         start_date DATE NOT NULL,
         expiry_date DATE NOT NULL,
         status VARCHAR(20) DEFAULT 'active',
+        last_notified_date DATE,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+    // Ensure last_notified_date exists for existing tables
+    try {
+      await query("ALTER TABLE memberships ADD COLUMN IF NOT EXISTS last_notified_date DATE");
+    } catch (e) { /* ignore if already exists */ }
 
     console.log("📦 DATABASE: All Tables Verified & Initialized.");
   } catch (err) {

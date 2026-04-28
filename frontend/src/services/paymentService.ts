@@ -29,8 +29,12 @@ declare const payhere: any;
 export const startPayment = async (userId: number, pkg: any, user: any) => {
   try {
     const orderId = `ORDER_${Date.now()}`;
-    const amount = pkg.price;
+    const amount = Number(pkg.price).toFixed(2);
     const currency = 'LKR';
+
+    // Fetch full profile to get phone number
+    const profileRes = await axios.get(`${API_URL}/member/profile/${userId}`);
+    const phone = profileRes.data?.phone || '0770000000';
 
     // 1. Get Hash from Backend
     const hashRes = await axios.post(`${API_URL}/payments/payhere/hash`, {
@@ -44,7 +48,7 @@ export const startPayment = async (userId: number, pkg: any, user: any) => {
       merchant_id: '1235459',
       return_url: `${window.location.origin}/member/payments?status=success`,
       cancel_url: `${window.location.origin}/member/payments?status=cancel`,
-      notify_url: `${window.location.origin}${API_URL}/payments/payhere/notify`,
+      notify_url: hashRes.data.notify_url, // Use public URL from backend (ngrok)
       order_id: orderId,
       items: pkg.name,
       amount: amount.toString(),
@@ -53,7 +57,7 @@ export const startPayment = async (userId: number, pkg: any, user: any) => {
       first_name: user.name.split(' ')[0],
       last_name: user.name.split(' ')[1] || 'User',
       email: user.email,
-      phone: '0774625302', // Replace with actual phone number if available
+      phone: phone,
       address: 'Narrow Fitness Gym',
       city: 'Colombo',
       country: 'Sri Lanka',

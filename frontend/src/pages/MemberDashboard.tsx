@@ -47,7 +47,7 @@ export default function MemberDashboard() {
   const [isScanning, setIsScanning] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   
-  const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
+  const [notification, setNotification] = useState<{message: string, type: 'success' | 'error' | 'warning'} | null>(null);
   const [isBmiModalOpen, setIsBmiModalOpen] = useState(false);
   const [bmiInputs, setBmiInputs] = useState({ weight: '', height: '' });
   const [bmiResult, setBmiResult] = useState<string | null>(null);
@@ -56,7 +56,7 @@ export default function MemberDashboard() {
   const location = useLocation();
   const scannerRef = useRef<Html5Qrcode | null>(null);
 
-  const showNotification = (message: string, type: 'success' | 'error') => {
+  const showNotification = (message: string, type: 'success' | 'error' | 'warning') => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 4000);
   };
@@ -87,8 +87,8 @@ export default function MemberDashboard() {
     const parsedUser = JSON.parse(storedUser);
     setUser(parsedUser);
 
-    fetchAttendanceStatus(parsedUser.id);
     fetchMembership(parsedUser.id);
+    fetchAttendanceStatus(parsedUser.id);
 
     fetch(`/api/member/profile/${parsedUser.id}`)
       .then(res => res.ok ? res.json() : null)
@@ -290,8 +290,108 @@ export default function MemberDashboard() {
 
   if (!user) return null;
 
+  // --- GRACE PERIOD CALCULATION ---
+  const getGraceInfo = () => {
+    if (membership?.status !== 'grace_period' || !membership?.expiry_date) return null;
+    
+    const expiry = new Date(membership.expiry_date);
+    const GRACE_DAYS = 10;
+    const totalGraceMs = GRACE_DAYS * 24 * 60 * 60 * 1000;
+    const blockDate = new Date(expiry.getTime() + totalGraceMs); // Expiry + 10 days
+    const now = new Date();
+    
+    const diff = blockDate.getTime() - now.getTime();
+    
+    // If it's technically past the 10-day grace period but DB still says 'grace_period',
+    // we still show the banner but with 0 time left, until the backend moves it to 'blocked'
+    const isExpired = diff <= 0;
+
+    const days = Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
+    const hours = Math.max(0, Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)));
+    const mins = Math.max(0, Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)));
+
+    const percentageLeft = Math.min(100, Math.max(0, (diff / totalGraceMs) * 100));
+    
+    return {
+      timeLeft: isExpired ? "0d 0h 0m" : `${days}d ${hours}h ${mins}m`,
+      isLastDay: days < 1 || isExpired,
+      expired: isExpired,
+      percentageLeft
+    };
+  };
+
+  const graceInfo = getGraceInfo();
+
   return (
     <MemberLayout>
+      {/* --- GRACE PERIOD BANNER --- */}
+      {membership?.status === 'grace_period' && graceInfo && (
+        <motion.div 
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          className="mb-6 overflow-hidden rounded-3xl border-2 border-yellow-500/20 shadow-lg shadow-black/5 bg-yellow-50"
+        >
+          <div className={`px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4 relative z-10`}>
+            <div className="flex items-center gap-4">
+              <div className="bg-yellow-400 p-2 rounded-xl text-black">
+                <AlertCircle className={`w-6 h-6 ${graceInfo.isLastDay ? 'animate-bounce' : 'animate-pulse'}`} />
+              </div>
+              <div>
+                <p className="font-black uppercase italic tracking-tighter text-lg leading-none text-yellow-900">
+                  {graceInfo.isLastDay ? 'FINAL WARNING: EXPIRED' : 'MEMBERSHIP EXPIRED'}
+                </p>
+                <p className={`text-[10px] font-bold uppercase tracking-widest text-yellow-700 opacity-80 mt-1`}>
+                  {graceInfo.isLastDay 
+                    ? 'Your session will be BLOCKED today. Pay immediately to keep access.' 
+                    : `Your access expired on ${new Date(membership.expiry_date).toLocaleDateString()}. Grace period active.`}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-6">
+              <div className="text-right">
+                <p className={`text-[9px] font-black uppercase tracking-widest text-yellow-700 opacity-80 leading-none mb-1`}>Time Shower</p>
+                <p className="font-mono font-black text-xl tracking-tighter leading-none text-yellow-900">{graceInfo.timeLeft}</p>
+              </div>
+              <Link to="/member/payments" className="bg-yellow-500 text-white px-6 py-2.5 rounded-xl font-black uppercase tracking-widest text-[10px] hover:scale-105 transition-all shadow-md shadow-yellow-500/20">
+                Renew Access
+              </Link>
+            </div>
+          </div>
+          {/* Progress Bar (Time Shower) */}
+          <div className="h-1.5 bg-yellow-200 w-full overflow-hidden">
+            <motion.div 
+              initial={{ width: 0 }}
+              animate={{ width: `${graceInfo.percentageLeft}%` }}
+              transition={{ duration: 1, ease: "easeOut" }}
+              className={`h-full ${graceInfo.isLastDay ? 'bg-red-500' : 'bg-yellow-500'}`}
+            />
+          </div>
+        </motion.div>
+      )}
+
+      {/* --- BLOCKED OVERLAY (Actual Block) --- */}
+      {membership?.status === 'blocked' && (
+        <div className="fixed inset-0 z-[150] bg-black/95 backdrop-blur-xl flex items-center justify-center p-6 text-center">
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
+            <div className="w-24 h-24 bg-red-600 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-red-600/40">
+              <Ban className="w-12 h-12 text-white" />
+            </div>
+            <h2 className="text-5xl font-black text-white uppercase italic tracking-tighter mb-4">Account Blocked</h2>
+            <p className="text-slate-400 font-bold uppercase tracking-[0.2em] text-xs max-w-md mx-auto leading-relaxed mb-10">
+              Your grace period has expired and your session is now locked. Please settle your outstanding payments to reactivate your elite access.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <Link to="/member/payments" className="w-full sm:w-auto bg-red-600 text-white px-10 py-5 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-white hover:text-red-600 transition-all shadow-xl shadow-red-600/20">
+                Go to Payments
+              </Link>
+              <button onClick={() => window.location.reload()} className="w-full sm:w-auto bg-white/10 text-white px-10 py-5 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-white/20 transition-all">
+                Try Refresh
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
       <AnimatePresence>
         {notification && (
           <motion.div 
@@ -299,7 +399,9 @@ export default function MemberDashboard() {
             animate={{ opacity: 1, y: 20, x: '-50%' }}
             exit={{ opacity: 0, y: -50, x: '-50%' }}
             className={`fixed top-0 left-1/2 z-[200] px-6 py-4 rounded-2xl shadow-2xl border flex items-center gap-3 min-w-[300px] ${
-              notification.type === 'success' ? 'bg-white border-green-100 text-green-600' : 'bg-white border-red-100 text-red-600'
+              notification.type === 'success' ? 'bg-white border-green-100 text-green-600' : 
+              notification.type === 'warning' ? 'bg-yellow-50 border-yellow-200 text-yellow-700' :
+              'bg-white border-red-100 text-red-600'
             }`}
           >
             {notification.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
@@ -427,7 +529,7 @@ export default function MemberDashboard() {
                   <div className="text-[10px] font-black text-orange-500 uppercase tracking-[0.3em]">Member Status</div>
                   <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg uppercase tracking-widest border ${
                     membership?.status === 'active' ? 'text-green-500 border-green-500/30 bg-green-500/10' : 
-                    membership?.status === 'grace_period' ? 'text-yellow-500 border-yellow-500/30 bg-yellow-500/10' :
+                    membership?.status === 'grace_period' ? 'text-red-500 border-red-500/30 bg-red-500/10' :
                     membership?.status === 'blocked' ? 'text-red-500 border-red-500/30 bg-red-500/10' :
                     'text-slate-400 border-slate-700 bg-slate-800'
                   }`}>

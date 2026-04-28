@@ -318,19 +318,6 @@ export default function MemberLayout({ children }: MemberLayoutProps) {
       </nav>
 
       <main className="pt-28 pb-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-        {membership?.status === 'grace_period' && (
-          <div className="mb-6 bg-red-600 text-white px-6 py-4 rounded-2xl flex items-center justify-between shadow-lg shadow-red-200 animate-pulse">
-            <div className="flex items-center gap-4">
-              <ShieldCheck className="w-6 h-6" />
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest">Membership Grace Period</p>
-                <p className="text-[8px] font-bold opacity-80 uppercase">Your membership has expired. Please renew within 10 days to avoid account blocking.</p>
-              </div>
-            </div>
-            <Link to="/member/payments" className="bg-white text-red-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-100 transition-colors">Renew Now</Link>
-          </div>
-        )}
-
         {membership?.status === 'blocked' && location.pathname !== '/member/payments' ? (
           <div className="flex flex-col items-center justify-center py-20 bg-white rounded-[2.5rem] border-2 border-red-100 shadow-xl">
              <div className="w-20 h-20 bg-red-50 rounded-3xl flex items-center justify-center mb-6">
