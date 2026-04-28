@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { query } from '../index.js';
+import { query, BACKEND_URL } from '../index.js';
 import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
@@ -112,7 +112,7 @@ paymentRouter.post("/payhere/notify", async (req, res) => {
       const userRes = await query("SELECT email, name FROM users WHERE id = $1", [userId]);
       // Assuming phone number is stored somewhere, if not we use a placeholder or need to add it to schema
       // For now, let's assume we might have it or just log it
-      await sendWhatsAppMessage("REPLACE_WITH_USER_PHONE", `Hi ${userRes.rows[0].name}, your payment of LKR ${payhere_amount} was successful. Download receipt: http://localhost:5000/uploads/${pdfLink}`);
+      await sendWhatsAppMessage("REPLACE_WITH_USER_PHONE", `Hi ${userRes.rows[0].name}, your payment of LKR ${payhere_amount} was successful. Download receipt: ${BACKEND_URL}/uploads/${pdfLink}`);
 
     } catch (err) {
       console.error("Webhook Error:", err);

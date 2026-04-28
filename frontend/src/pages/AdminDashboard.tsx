@@ -67,22 +67,17 @@ export default function AdminDashboard() {
     return;
   }
 
-  // ✅ STEP 1: Determine if we are on Localhost or Live
-  // If localhost, use the full path. If Live, use a relative path.
-  const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:5000' : '';
-
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
       
-      // ✅ STEP 2: Use the dynamic API_BASE variable
-      const statsRes = await fetch(`${API_BASE}/api/admin/stats`);
+      const statsRes = await fetch(`/api/admin/stats`);
       if (statsRes.ok) {
         const statsData = await statsRes.json();
         setStats(statsData);
       }
 
-      const usersRes = await fetch(`${API_BASE}/api/admin/users/recent`);
+      const usersRes = await fetch(`/api/admin/users/recent`);
       if (usersRes.ok) {
         const usersData = await usersRes.json();
         setRecentUsers(usersData);
@@ -103,7 +98,7 @@ export default function AdminDashboard() {
     setIsSending(true); // START PROCESSING
 
     try {
-      const res = await fetch('http://localhost:5000/api/admin/broadcast-email', {
+      const res = await fetch('/api/admin/broadcast-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(broadcastData)

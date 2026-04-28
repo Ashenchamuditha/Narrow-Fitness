@@ -153,6 +153,9 @@ verifyEnvironment();
 const JWT_SECRET = process.env.JWT_SECRET || "narrow_fitness_secret_key_123";
 const DATABASE_URL = process.env.DATABASE_URL;
 
+export const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
+export const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5000";
+
 // --- 3. APP & HTTP SERVER SETUP ---
 // --- ATTENDANCE AUTO-CHECKOUT TASK (Every 15 Minutes) ---
 setInterval(async () => {
@@ -196,7 +199,7 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: { 
-    origin: "http://localhost:3000", 
+    origin: FRONTEND_URL, 
     methods: ["GET", "POST", "PUT", "DELETE"] 
   }
 });

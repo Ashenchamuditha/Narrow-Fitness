@@ -41,10 +41,10 @@ export const startPayment = async (userId: number, pkg: any, user: any) => {
 
     const payment: PayHerePayment = {
       sandbox: true, // Set to false for production
-      merchant_id: '1211149', // Replace with your Merchant ID
-      return_url: 'http://localhost:3000/member/payments?status=success',
-      cancel_url: 'http://localhost:3000/member/payments?status=cancel',
-      notify_url: `${API_URL}/payments/payhere/notify`,
+      merchant_id: '1235459',
+      return_url: `${window.location.origin}/member/payments?status=success`,
+      cancel_url: `${window.location.origin}/member/payments?status=cancel`,
+      notify_url: `${window.location.origin}${API_URL}/payments/payhere/notify`,
       order_id: orderId,
       items: pkg.name,
       amount: amount.toString(),
@@ -53,7 +53,7 @@ export const startPayment = async (userId: number, pkg: any, user: any) => {
       first_name: user.name.split(' ')[0],
       last_name: user.name.split(' ')[1] || 'User',
       email: user.email,
-      phone: '0771234567',
+      phone: '0774625302', // Replace with actual phone number if available
       address: 'Narrow Fitness Gym',
       city: 'Colombo',
       country: 'Sri Lanka',

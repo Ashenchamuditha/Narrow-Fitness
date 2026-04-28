@@ -19,7 +19,7 @@ export default function WallPayment() {
       setIdentifiedUser(res.data);
       
       // Fetch plans
-      const plansRes = await fetch('http://localhost:5000/api/admin/pricing');
+      const plansRes = await fetch('/api/admin/pricing');
       const plansData = await plansRes.json();
       setPlans(plansData);
     } catch (err: any) {

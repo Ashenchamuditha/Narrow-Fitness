@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-//add to git only
 import MemberLayout from '../components/MemberLayout';
 import { 
   ShieldCheck, Zap, Star, Key, 
