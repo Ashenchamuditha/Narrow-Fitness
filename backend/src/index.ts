@@ -398,15 +398,9 @@ const initDB = async () => {
         start_date DATE NOT NULL,
         expiry_date DATE NOT NULL,
         status VARCHAR(20) DEFAULT 'active',
-        last_notified_date DATE,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
-
-    // Ensure last_notified_date exists for existing tables
-    try {
-      await query("ALTER TABLE memberships ADD COLUMN IF NOT EXISTS last_notified_date DATE");
-    } catch (e) { /* ignore if already exists */ }
 
     console.log("📦 DATABASE: All Tables Verified & Initialized.");
   } catch (err) {
