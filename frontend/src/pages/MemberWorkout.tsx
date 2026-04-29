@@ -78,7 +78,8 @@ export default function MemberWorkout() {
         setPastedText(fullData.content);
         setSelectedFile(null);
       } else {
-        setSelectedFile({ name: fullData.file_name, data: fullData.content });
+        // ✅ Use raw_data for the preview/data field if it exists
+        setSelectedFile({ name: fullData.file_name, data: fullData.raw_data || fullData.content });
         setPastedText('');
       }
       setIsModalOpen(true);
@@ -115,6 +116,33 @@ export default function MemberWorkout() {
 
     setIsScanning(true);
     try {
+      let finalContent = uploadType === 'text' ? pastedText : "";
+      let rawDataForStorage = uploadType === 'file' ? selectedFile?.data : null;
+      let extractedFileName = uploadType === 'file' ? selectedFile?.name : null;
+
+      // 🔍 ELITE EXTRACTION: If it's a file, we MUST extract text for the AI to read it
+      if (uploadType === 'file' && selectedFile?.file) {
+          console.log("🚀 [SCANNING] Extracting text from workout file...");
+          const formData = new FormData();
+          formData.append('file', selectedFile.file);
+
+          try {
+              const scanRes = await fetch('/api/member/ai/process-media', { method: 'POST', body: formData });
+              const scanData = await scanRes.json();
+              if (scanRes.ok) {
+                  console.log("✅ [SCANNING] Text extracted successfully for AI context.");
+                  // We save the extracted text as the content so the AI can read it!
+                  finalContent = scanData.text; 
+              } else {
+                  console.warn("⚠️ [SCANNING] Extraction failed, using empty content.", scanData.message);
+                  finalContent = "Scanning failed. Please check the uploaded file manually.";
+              }
+          } catch (scanErr) {
+              console.error("❌ [SCANNING ERROR] Could not extract text:", scanErr);
+              finalContent = "Connection error during scanning.";
+          }
+      }
+
       const url = editingId ? `/api/member/workouts/${editingId}` : '/api/member/workouts';
       const method = editingId ? 'PUT' : 'POST';
 
@@ -125,8 +153,9 @@ export default function MemberWorkout() {
           userId: userId,
           title,
           sourceType: uploadType,
-          content: uploadType === 'file' ? selectedFile?.data : pastedText,
-          fileName: uploadType === 'file' ? selectedFile?.name : null
+          content: finalContent,
+          fileName: extractedFileName,
+          rawData: rawDataForStorage
         })
       });
 
@@ -135,9 +164,11 @@ export default function MemberWorkout() {
         handleCloseModal();
         window.location.reload(); 
       } else {
-          alert("❌ Error saving workout. Please try again.");
+          const errorData = await res.json();
+          alert(`❌ Error saving workout: ${errorData.message || 'Unknown error'}`);
       }
     } catch (err) {
+        console.error("❌ Connection error:", err);
         alert("❌ Connection error.");
     } finally { setIsScanning(false); }
   };
@@ -151,8 +182,15 @@ export default function MemberWorkout() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // 🛑 BLOCK WORD DOCUMENTS (Doc/Docx) - AI Incompatibility
+      if (file.name.toLowerCase().endsWith('.doc') || file.name.toLowerCase().endsWith('.docx')) {
+        alert("⚠️ Word documents (.doc, .docx) are not supported. Please convert your workout to a PDF or copy-paste the text for AI analysis.");
+        e.target.value = ''; // Reset input
+        return;
+      }
+
       const reader = new FileReader();
-      reader.onloadend = () => setSelectedFile({ name: file.name, data: reader.result });
+      reader.onloadend = () => setSelectedFile({ name: file.name, data: reader.result, file: file });
       reader.readAsDataURL(file);
     }
   };
@@ -164,7 +202,7 @@ export default function MemberWorkout() {
   return (
     <MemberLayout>
       <div className="min-h-screen bg-[#f8fafc] -mt-10 pt-10 px-2 sm:px-0 pb-20">
-        
+
         {/* --- HEADER --- */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12 px-4">
           <div>
@@ -185,7 +223,7 @@ export default function MemberWorkout() {
             <div>
               <h4 className="text-[10px] font-black text-slate-400 mb-1 tracking-widest">Ai coaching tip</h4>
               <p className="text-sm font-bold text-slate-700 leading-relaxed tracking-tight">
-                For 100% accurate AI coaching, prioritize pdfs or manual paste. JPG/PNG images are supported but may have limited scan precision.
+                For 100% accurate AI coaching, prioritize PDF files or manual text entry. Word documents are not supported. JPG/PNG images are supported but may have limited scan precision.
               </p>
             </div>
           </div>
@@ -216,7 +254,7 @@ export default function MemberWorkout() {
                         <p className="text-[9px] text-slate-400 font-bold tracking-widest">Type: {plan.source_type} • Linked on {new Date(plan.created_at).toLocaleDateString()}</p>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-center gap-2">
                        {!plan.is_active && (
                          <button onClick={(e) => handleActivate(e, plan.id)} className="px-5 py-2.5 bg-slate-900 text-white rounded-xl text-[9px] font-black tracking-widest hover:bg-orange-600 transition-all">Set active</button>
@@ -230,7 +268,7 @@ export default function MemberWorkout() {
               ))
             )}
           </div>
-          
+
           {/* SIDEBAR */}
           <div className="bg-slate-900 p-8 rounded-[2.5rem] text-white shadow-2xl h-fit sticky top-28 overflow-hidden">
             <div className="relative z-10">
@@ -267,7 +305,7 @@ export default function MemberWorkout() {
                 </div>
                 <form onSubmit={handleSaveWorkout} className="space-y-6">
                   <input required placeholder="Workout title" value={title} onChange={(e)=>setTitle(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4 font-bold focus:border-orange-500 outline-none transition-all" />
-                  
+
                   <div className="flex gap-2 p-1.5 bg-slate-100 rounded-2xl">
                     <button type="button" onClick={()=>setUploadType('file')} className={`flex-1 py-3 rounded-xl text-[10px] font-black transition-all ${uploadType === 'file' ? 'bg-white shadow-lg text-slate-900' : 'text-slate-400'}`}>Upload file</button>
                     <button type="button" onClick={()=>setUploadType('text')} className={`flex-1 py-3 rounded-xl text-[10px] font-black transition-all ${uploadType === 'text' ? 'bg-white shadow-lg text-slate-900' : 'text-slate-400'}`}>Paste text</button>
@@ -275,10 +313,10 @@ export default function MemberWorkout() {
 
                   {uploadType === 'file' ? (
                     <div className="border-2 border-dashed border-slate-200 rounded-[2rem] p-10 text-center relative hover:border-orange-500 transition-colors bg-slate-50 shadow-inner">
-                      <input type="file" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx" onChange={handleFileChange} className="absolute inset-0 opacity-0 cursor-pointer" />
+                      <input type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={handleFileChange} className="absolute inset-0 opacity-0 cursor-pointer" />
                       <UploadCloud className="mx-auto mb-3 text-orange-500 w-10 h-10" />
                       <p className="text-[10px] font-black text-slate-500 tracking-widest">
-                        {selectedFile ? selectedFile.name : 'PDF, PNG, JPG, or DOC (2MB)'}
+                        {selectedFile ? selectedFile.name : 'PDF, PNG, or JPG (2MB)'}
                       </p>
                     </div>
                   ) : (
@@ -309,7 +347,7 @@ export default function MemberWorkout() {
                 </div>
                 <button onClick={() => setViewingPlan(null)} className="p-3 bg-slate-50 rounded-full hover:bg-red-500 hover:text-white transition-all shadow-sm"><X className="w-6 h-6" /></button>
               </div>
-              
+
               <div className="flex-1 overflow-hidden bg-[#fafafa]">
                 {viewingPlan.source_type === 'text' ? (
                   <div className="p-12 h-full overflow-y-auto">
@@ -318,17 +356,17 @@ export default function MemberWorkout() {
                     </div>
                   </div>
                 ) : isPDF(viewingPlan.file_name) ? (
-                  <iframe src={`${viewingPlan.content}#toolbar=0`} className="w-full h-full border-none" title="PDF Preview" />
+                  <iframe src={`${viewingPlan.raw_data || viewingPlan.content}#toolbar=0`} className="w-full h-full border-none" title="PDF Preview" />
                 ) : isImage(viewingPlan.file_name) ? (
                   <div className="p-10 h-full overflow-y-auto flex justify-center items-start">
-                    <img src={viewingPlan.content} className="max-w-full rounded-[2rem] shadow-2xl border-8 border-white" alt="Workout Details" />
+                    <img src={viewingPlan.raw_data || viewingPlan.content} className="max-w-full rounded-[2rem] shadow-2xl border-8 border-white" alt="Workout Details" />
                   </div>
                 ) : (
                   <div className="h-full flex flex-col items-center justify-center text-center p-12">
                      <FileText className="w-20 h-20 text-orange-500 mb-8" />
                      <h3 className="text-3xl font-black text-slate-900 italic mb-4 tracking-tighter">Document ready</h3>
                      <p className="text-slate-500 text-xs font-bold mb-10 max-w-sm">Word documents require a local reader. Download below to review your workout.</p>
-                     <a href={viewingPlan.content} download={viewingPlan.file_name} className="px-12 py-5 bg-black text-white rounded-2xl font-black text-xs hover:bg-orange-600 transition-all shadow-2xl flex items-center gap-4">
+                     <a href={viewingPlan.raw_data || viewingPlan.content} download={viewingPlan.file_name} className="px-12 py-5 bg-black text-white rounded-2xl font-black text-xs hover:bg-orange-600 transition-all shadow-2xl flex items-center gap-4">
                         <Download className="w-5 h-5" /> Download to view
                      </a>
                   </div>
@@ -340,4 +378,4 @@ export default function MemberWorkout() {
       </AnimatePresence>
     </MemberLayout>
   );
-}
+  }

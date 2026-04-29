@@ -223,6 +223,14 @@ export default function MemberAIAssistant() {
 
   const handleFileUpload = async (e: any) => {
     const file = e.target.files[0]; if (!file) return;
+
+    // 🛑 BLOCK WORD DOCUMENTS (Doc/Docx) - AI Incompatibility
+    if (file.name.toLowerCase().endsWith('.doc') || file.name.toLowerCase().endsWith('.docx')) {
+      alert("⚠️ Word documents (.doc, .docx) are not supported. Please convert your workout to a PDF or copy-paste the text.");
+      e.target.value = '';
+      return;
+    }
+
     setIsProcessingMedia(true);
     const formData = new FormData(); formData.append('file', file);
     try {
@@ -371,7 +379,7 @@ export default function MemberAIAssistant() {
             <div className="flex items-center gap-2 lg:gap-3 max-w-5xl mx-auto">
               <label className="p-3.5 lg:p-4 bg-slate-100 text-slate-400 rounded-2xl hover:bg-slate-200 cursor-pointer transition-all shrink-0">
                   {isProcessingMedia ? <RefreshCw className="w-5 animate-spin text-orange-600" /> : <Paperclip className="w-5" />}
-                  <input type="file" onChange={handleFileUpload} className="hidden" accept=".pdf,.docx,.png,.jpg,.jpeg" />
+                  <input type="file" onChange={handleFileUpload} className="hidden" accept=".pdf,.png,.jpg,.jpeg" />
               </label>
               
               <div className="flex-1 flex items-center gap-2 bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] px-2 focus-within:border-orange-500 transition-all shadow-sm overflow-hidden">
@@ -456,7 +464,7 @@ export default function MemberAIAssistant() {
                         <div className="p-6 bg-orange-50 rounded-3xl border-2 border-orange-100 relative overflow-hidden">
                             <Zap className="w-16 h-16 text-orange-600 opacity-5 absolute -right-4 -top-4 rotate-12" />
                             <h4 className="text-[10px] font-black text-orange-600 mb-2 uppercase tracking-widest italic text-center">ai coaching tip</h4>
-                            <p className="text-[12px] text-orange-800 font-bold leading-relaxed italic relative z-10 text-center">ai coaching tip: for 100% accurate coaching, prioritize pdfs or manual paste. jpg/png images are supported but may have limited scan precision.</p><br />
+                            <p className="text-[12px] text-orange-800 font-bold leading-relaxed italic relative z-10 text-center">ai coaching tip: for 100% accurate coaching, prioritize PDF files or manual text entry. Word documents are not supported. JPG/PNG images are supported but may have limited scan precision.</p><br />
                             <p className="text-[12px] text-orange-800 font-bold leading-relaxed italic text-center">You can now ask questions in English or Sinhala (සිංහල).</p>
                         </div>
                         <div className="p-6 bg-slate-900 rounded-3xl text-white relative overflow-hidden shadow-lg border border-white/5">

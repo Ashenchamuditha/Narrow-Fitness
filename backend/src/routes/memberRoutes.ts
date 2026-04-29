@@ -292,17 +292,17 @@ memberRouter.get("/workouts/detail/:id", async (req, res) => {
 // 3. NEW: UPDATE an existing workout plan
 memberRouter.put("/workouts/:id", async (req, res) => {
   const { id } = req.params;
-  const { title, sourceType, content, fileName } = req.body;
+  const { title, sourceType, content, fileName, rawData } = req.body;
 
   try {
     console.log(`📡 Updating Workout Plan ID: ${id}`);
     
     const result = await query(
       `UPDATE workouts 
-       SET title = $1, source_type = $2, content = $3, file_name = $4 
-       WHERE id = $5 
+       SET title = $1, source_type = $2, content = $3, file_name = $4, raw_data = $5 
+       WHERE id = $6 
        RETURNING *`,
-      [title, sourceType, content, fileName, id]
+      [title, sourceType, content, fileName, rawData || null, id]
     );
 
     if (result.rows.length === 0) {
@@ -318,14 +318,14 @@ memberRouter.put("/workouts/:id", async (req, res) => {
 
 // 4. Save a new workout
 memberRouter.post("/workouts", async (req, res) => {
-  const { userId, title, sourceType, content, fileName } = req.body;
+  const { userId, title, sourceType, content, fileName, rawData } = req.body;
   if (!userId || !title || !content || !sourceType) {
     return res.status(400).json({ message: "Missing required fields." });
   }
   try {
     const result = await query(
-      "INSERT INTO workouts (userid, title, source_type, content, file_name, is_active) VALUES ($1, $2, $3, $4, $5, FALSE) RETURNING *",
-      [userId, title, sourceType, content, fileName || null]
+      "INSERT INTO workouts (userid, title, source_type, content, file_name, raw_data, is_active) VALUES ($1, $2, $3, $4, $5, $6, FALSE) RETURNING *",
+      [userId, title, sourceType, content, fileName || null, rawData || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (err: any) {

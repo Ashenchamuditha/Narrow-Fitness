@@ -265,10 +265,23 @@ aiRouter.post("/chat", async (req, res) => {
 
     // Fetch Active Workout Cache
     let workoutContext = "no active workout.";
-    const activeWorkoutRes = await query("SELECT title, content FROM workouts WHERE userid = $1 AND is_active = true LIMIT 1", [uid]);
+    const activeWorkoutRes = await query("SELECT title, content, source_type, file_name FROM workouts WHERE userid = $1 AND is_active = true LIMIT 1", [uid]);
+    
     if (activeWorkoutRes?.rows[0]) {
-      workoutContext = `active workout: ${activeWorkoutRes.rows[0].title}. details: ${activeWorkoutRes.rows[0].content}`;
+      const activeWorkout = activeWorkoutRes.rows[0];
+      const isDataUrl = typeof activeWorkout.content === 'string' && activeWorkout.content.startsWith('data:');
+      
+      console.log(`ðŸ“‹ [CONTEXT] Active workout: "${activeWorkout.title}" | Source: ${activeWorkout.source_type}`);
+      
+      if (isDataUrl) {
+          console.warn(`âš ï¸ [CONTEXT WARNING] Workout content is a Data URL (Binary). AI cannot read this.`);
+          workoutContext = `active workout: ${activeWorkout.title}. [Warning: content is in binary format]`;
+      } else {
+          workoutContext = `active workout: ${activeWorkout.title}. details: ${activeWorkout.content}`;
+          console.log(`âœ… [CONTEXT] Loaded (~${activeWorkout.content?.length} chars)`);
+      }
     }
+    console.log(`ðŸ¤– [SYSTEM PROMPT] Context: ${workoutContext.substring(0, 100)}...`);
 
     // SYSTEM PROMPT (STRICT PROTOCOLS)
     const systemPrompt = `you are the "narrow fitness master coach". 
