@@ -3,7 +3,8 @@ import MemberLayout from '../components/MemberLayout';
 import { 
   Bot, Send, User, Dumbbell, Utensils, ShieldCheck, Zap, Lock, 
   RefreshCw, Info, X, Target, Activity, Crown, ArrowRight, Timer, Mic, 
-  Paperclip, ChevronDown, MessageSquare, Plus, FileText, Image as ImageIcon, Trash2, Menu, CheckCircle2, PlayCircle
+  Paperclip, ChevronDown, MessageSquare, Plus, FileText, Image as ImageIcon, Trash2, Menu, CheckCircle2, PlayCircle,
+  PanelLeftClose, PanelLeftOpen
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -92,6 +93,7 @@ export default function MemberAIAssistant() {
   const [attachedFiles, setAttachedFiles] = useState<Attachment[]>([]);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isNewSessionModalOpen, setIsNewSessionModalOpen] = useState(false);
   const [newSessionTitle, setNewSessionTitle] = useState('');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -261,26 +263,38 @@ export default function MemberAIAssistant() {
   if (!user) return null;
 
   return (
-    <MemberLayout>
-      <div className="flex h-[calc(100vh-7rem)] max-w-6xl mx-auto w-full gap-6 px-2 lg:px-4">
+    <MemberLayout fullWidth>
+      <div className="flex h-[calc(100vh-7rem)] w-full gap-6 px-2 lg:px-4">
         
         {/* --- DESKTOP SIDEBAR --- */}
-        <div className="hidden lg:flex flex-col w-72 bg-white rounded-[2.5rem] border border-slate-100 p-6 shadow-xl">
-           <button onClick={() => setIsNewSessionModalOpen(true)} className="w-full py-4 bg-black text-white rounded-2xl font-black italic text-[11px] mb-6 flex items-center justify-center gap-2 hover:bg-orange-600 transition-all shadow-lg">
-             <Plus className="w-4 h-4" /> new workout chat
-           </button>
-           <div className="flex-1 overflow-y-auto space-y-3 no-scrollbar pr-1">
-              {sessions.map(s => (
-                <div key={s.id} className="relative group">
-                    <button onClick={() => switchSession(s.id)} className={`w-full text-left p-5 rounded-2xl transition-all border ${currentSid === s.id ? 'bg-orange-50 border-orange-200 text-orange-600 shadow-md' : 'bg-slate-50 border-transparent hover:bg-slate-100'}`}>
-                        <p className="text-[11px] font-black italic truncate leading-none pr-6">"{s.title}"</p>
-                        <p className="text-[8px] font-bold mt-2 opacity-50 uppercase tracking-widest">{new Date(s.created_at).toLocaleDateString()}</p>
-                    </button>
-                    <button onClick={(e) => deleteSession(e, s.id)} className="absolute right-4 top-5 p-1.5 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-3.5 h-3.5" /></button>
-                </div>
-              ))}
-           </div>
-        </div>
+        <AnimatePresence initial={false}>
+          {isSidebarOpen && (
+            <motion.div 
+              initial={{ width: 0, opacity: 0, marginRight: 0 }}
+              animate={{ width: 288, opacity: 1, marginRight: 24 }}
+              exit={{ width: 0, opacity: 0, marginRight: 0 }}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              className="hidden lg:flex flex-col bg-white rounded-[2.5rem] border border-slate-100 shadow-xl overflow-hidden"
+            >
+               <div className="w-72 p-6 flex flex-col h-full">
+                  <button onClick={() => setIsNewSessionModalOpen(true)} className="w-full py-4 bg-black text-white rounded-2xl font-black italic text-[11px] mb-6 flex items-center justify-center gap-2 hover:bg-orange-600 transition-all shadow-lg shrink-0">
+                    <Plus className="w-4 h-4" /> new workout chat
+                  </button>
+                  <div className="flex-1 overflow-y-auto space-y-3 no-scrollbar pr-1">
+                     {sessions.map(s => (
+                       <div key={s.id} className="relative group">
+                           <button onClick={() => switchSession(s.id)} className={`w-full text-left p-5 rounded-2xl transition-all border ${currentSid === s.id ? 'bg-orange-50 border-orange-200 text-orange-600 shadow-md' : 'bg-slate-50 border-transparent hover:bg-slate-100'}`}>
+                               <p className="text-[11px] font-black italic truncate leading-none pr-6">"{s.title}"</p>
+                               <p className="text-[8px] font-bold mt-2 opacity-50 uppercase tracking-widest">{new Date(s.created_at).toLocaleDateString()}</p>
+                           </button>
+                           <button onClick={(e) => deleteSession(e, s.id)} className="absolute right-4 top-5 p-1.5 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-3.5 h-3.5" /></button>
+                       </div>
+                     ))}
+                  </div>
+               </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* --- MAIN CHAT UI --- */}
         <div className="flex-1 flex flex-col bg-white rounded-[2.5rem] border border-slate-100 shadow-2xl overflow-hidden relative">
@@ -289,6 +303,27 @@ export default function MemberAIAssistant() {
           <div className="px-5 py-4 border-b border-slate-50 flex justify-between items-center bg-white/95 backdrop-blur-md z-20 shadow-sm">
             <div className="flex items-center gap-3">
               <button onClick={() => setIsDrawerOpen(true)} className="lg:hidden p-2.5 bg-slate-50 text-slate-900 rounded-xl"><Menu className="w-5" /></button>
+              
+              {/* Sidebar Toggle for Desktop */}
+              <button 
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
+                className="hidden lg:flex p-2.5 bg-slate-50 text-slate-900 rounded-xl hover:bg-orange-50 hover:text-orange-600 transition-all group"
+                title={isSidebarOpen ? "Hide History" : "Show History"}
+              >
+                {isSidebarOpen ? <PanelLeftClose className="w-5" /> : <PanelLeftOpen className="w-5" />}
+              </button>
+
+              {/* Quick New Chat Button when sidebar is hidden */}
+              {!isSidebarOpen && (
+                <button 
+                  onClick={() => setIsNewSessionModalOpen(true)} 
+                  className="hidden lg:flex items-center gap-2 px-4 py-2 bg-black text-white rounded-xl hover:bg-orange-600 transition-all shadow-md group shrink-0"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span className="text-[10px] font-black italic uppercase">New Chat</span>
+                </button>
+              )}
+
               <div className="w-10 h-10 bg-orange-600 rounded-xl flex items-center justify-center shadow-lg"><Bot className="text-white w-6" /></div>
               <div>
                  <h3 className="text-lg font-black italic text-slate-900 leading-none">ai coach</h3>

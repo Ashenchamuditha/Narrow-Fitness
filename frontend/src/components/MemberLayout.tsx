@@ -20,9 +20,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 interface MemberLayoutProps {
   children: React.ReactNode;
+  fullWidth?: boolean;
 }
 
-export default function MemberLayout({ children }: MemberLayoutProps) {
+export default function MemberLayout({ children, fullWidth = false }: MemberLayoutProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -317,7 +318,7 @@ export default function MemberLayout({ children }: MemberLayoutProps) {
         </AnimatePresence>
       </nav>
 
-      <main className="pt-28 pb-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+      <main className={`pt-28 pb-12 px-4 sm:px-6 lg:px-8 mx-auto ${fullWidth ? 'max-w-none' : 'max-w-7xl'}`}>
         {membership?.status === 'blocked' && location.pathname !== '/member/payments' ? (
           <div className="flex flex-col items-center justify-center py-20 bg-white rounded-[2.5rem] border-2 border-red-100 shadow-xl">
              <div className="w-20 h-20 bg-red-50 rounded-3xl flex items-center justify-center mb-6">
