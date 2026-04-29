@@ -15,20 +15,30 @@ const safePdfParse = async (buffer: any) => {
   try {
     const lib = pdfLib as any;
 
-    // 1. Check if the import itself is the function (Standard CJS)
+    // 1. Support for Mehmet Kozan's pdf-parse (v2.0.0+)
+    if (lib.PDFParse && typeof lib.PDFParse === 'function') {
+      const parser = new lib.PDFParse({ data: buffer });
+      const result = await parser.getText();
+      return result.text || "";
+    }
+
+    // 2. Check if the import itself is the function (Standard CJS / Classic pdf-parse)
     if (typeof lib === 'function') {
-      return await lib(buffer);
+      const data = await lib(buffer);
+      return typeof data === 'string' ? data : (data?.text || "");
     }
 
-    // 2. Check if it's wrapped in .default (Standard ESM Interop)
+    // 3. Check if it's wrapped in .default (Standard ESM Interop)
     if (lib.default && typeof lib.default === 'function') {
-      return await lib.default(buffer);
+      const data = await lib.default(buffer);
+      return typeof data === 'string' ? data : (data?.text || "");
     }
 
-    // 3. Last resort: check for common property names
+    // 4. Last resort: check for common property names
     const fallback = lib.pdf || lib.parse;
     if (typeof fallback === 'function') {
-      return await fallback(buffer);
+      const data = await fallback(buffer);
+      return typeof data === 'string' ? data : (data?.text || "");
     }
 
     throw new Error("PDF parser function not found in library.");
