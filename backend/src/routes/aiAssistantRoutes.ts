@@ -227,14 +227,14 @@ aiRouter.post("/chat", async (req, res) => {
 
     const modelToUse = (inputType === 'file' || inputType === 'voice') 
   ? "llama-3.3-70b-versatile" 
-  : "llama-3.3-70b-versatile"; // I have set both to 70b for your project safety.
+  : "llama-3.1-8b-instant"; // 8B for fast text, 70B for complex analysis
 
 
     // --- UPDATED LOGGING ---
     console.log(`-------------------------------------------`);
     console.log(`👤 User ID: ${userData.user_db_id || uid}`); 
     console.log(`📦 Package: ${userData.package_name || 'Free'} (ID: ${userData.package_id || 'N/A'})`);
-    console.log(`🤖 Model: ${modelToUse}`); // <--- MODEL SHOWN HERE
+    console.log(`🤖 Model: ${modelToUse}`); 
     console.log(`🕒 Time: ${currentDateTime}`);
     console.log(`💬 Message: ${message?.substring(0, 30)}...`);
     const inputLabel = inputType === 'voice' ? '🎤 Voice' : '💬 Text';
@@ -259,8 +259,8 @@ aiRouter.post("/chat", async (req, res) => {
     const now = new Date();
     const lastMsgTime = new Date(userData.last_message_at || 0);
     const hoursPassed = (now.getTime() - lastMsgTime.getTime()) / (1000 * 60 * 60);
-    if (userData.daily_count >= DAILY_LIMIT && hoursPassed < 2) {
-        return res.status(403).json({ message: "Daily quota exhausted." });
+    if (userData.daily_count >= DAILY_LIMIT && hoursPassed < 24) {
+        return res.status(403).json({ message: "Daily quota exhausted. It resets every 24 hours." });
     }
 
     // Fetch Active Workout Cache
@@ -325,20 +325,26 @@ STRICT OPERATIONAL RULES:
     });
 
     const data: any = await groqRes.json();
-    const remainingTokens = groqRes.headers.get("x-ratelimit-remaining-tokens") || "Unknown";
     
-   
+    // --- ACCURATE GROQ QUOTA TRACKING ---
+    const remTokens = groqRes.headers.get("x-ratelimit-remaining-tokens");
+    const limTokens = groqRes.headers.get("x-ratelimit-limit-tokens");
+    const remReqs = groqRes.headers.get("x-ratelimit-remaining-requests");
+    const limReqs = groqRes.headers.get("x-ratelimit-limit-requests");
 
     // 6. LOG TOKEN USAGE
      if (data.usage) {
        console.log(`🎫 Tokens: Prompt: ${data.usage.prompt_tokens} | Completion: ${data.usage.completion_tokens} | Total: ${data.usage.total_tokens}`);
-      // 3. SHOW REMAINING TOKENS FOR THE DAY
-      console.log(`📉 TOKENS REMAINING (TPD): ${remainingTokens}`);
       
-      // Calculate percentage used for your info (based on your TPD limits)
-      const limit = modelToUse.includes('70b') ? 100000 : 500000;
-      const percentUsed = ((limit - Number(remainingTokens)) / limit * 100).toFixed(2);
-      console.log(`📊 Daily Limit Usage: ${percentUsed}%`);
+       if (remTokens && limTokens) {
+          const tpmUsed = ((Number(limTokens) - Number(remTokens)) / Number(limTokens) * 100).toFixed(2);
+          console.log(`📉 TPM Usage (Per Minute): ${tpmUsed}% [${remTokens}/${limTokens} tokens left]`);
+       }
+
+       if (remReqs && limReqs) {
+          const rpdUsed = ((Number(limReqs) - Number(remReqs)) / Number(limReqs) * 100).toFixed(2);
+          console.log(`📊 RPD Usage (Daily Requests): ${rpdUsed}% [${remReqs}/${limReqs} requests left]`);
+       }
     }
     console.log(`-------------------------------------------`);
 
@@ -352,7 +358,7 @@ STRICT OPERATIONAL RULES:
     await query("INSERT INTO chat_history (userid, role, message, session_id, input_type, file_name) VALUES ($1, 'user', $2, $3, $4, $5)", [uid, message, sessionId, inputType || 'text', fileName || null]);
     await query("INSERT INTO chat_history (userid, role, message, session_id, input_type) VALUES ($1, 'model', $2, $3, 'text')", [uid, responseText, sessionId]);
     
-    const resetCount = hoursPassed >= 2 ? 1 : Number(userData.daily_count) + 1;
+    const resetCount = hoursPassed >= 24 ? 1 : Number(userData.daily_count) + 1;
     await query("UPDATE ai_usage SET daily_count = $1, last_message_at = NOW() WHERE userid = $2", [resetCount, uid]);
 
     res.json({ text: responseText, usage: { current: resetCount, max: DAILY_LIMIT } });
