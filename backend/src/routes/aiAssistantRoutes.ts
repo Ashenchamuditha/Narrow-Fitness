@@ -67,6 +67,19 @@ aiRouter.get("/history/:sessionId", async (req, res) => {
   } catch (err) { res.status(500).json({ messages: [] }); }
 });
 
+aiRouter.post("/sessions/new", async (req, res) => {
+  const { userId, title } = req.body;
+  try {
+    const result = await query(
+      "INSERT INTO chat_sessions (userid, title) VALUES ($1, $2) RETURNING id, title, created_at",
+      [userId, title]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ message: "failed to create session" });
+  }
+});
+
 
 
 // --- 3. MEDIA EXTRACTION ENGINE (ULTIMATE STABILITY) ---

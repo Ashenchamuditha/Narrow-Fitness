@@ -450,7 +450,7 @@ export default function MemberAIAssistant() {
                     <div className="flex items-center gap-3 mb-8 text-orange-600"><ShieldCheck className="w-10 h-10" /><h2 className="text-3xl font-black italic text-slate-900 leading-none">coach hub</h2></div>
                     <div className="space-y-6">
                         <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 shadow-sm">
-                            <div className="flex justify-between items-center mb-4"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">daily session limit:</span><span className="text-sm font-black text-orange-600 uppercase">{usageInfo.max - usageInfo.current} protocols left</span></div>
+                            <div className="flex justify-between items-center mb-4"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">daily session limit:</span><span className="text-sm font-black text-orange-600 uppercase">{usageInfo.max - usageInfo.current} Chats left</span></div>
                             <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden shadow-inner"><motion.div initial={{ width: 0 }} animate={{ width: `${(usageInfo.current / usageInfo.max) * 100}%` }} className="bg-orange-600 h-full shadow-[0_0_10px_#f97316]" /></div>
                         </div>
                         <div className="p-6 bg-orange-50 rounded-3xl border-2 border-orange-100 relative overflow-hidden">
