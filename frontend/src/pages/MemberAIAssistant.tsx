@@ -102,8 +102,10 @@ export default function MemberAIAssistant() {
   const [lockMessage, setLockMessage] = useState(''); 
   const [usageInfo, setUsageInfo] = useState({ current: 0, max: 10, sessionMax: 30 });
   const [isListening, setIsListening] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
-  // --- FUNCTIONS (Hoisted before Use) ---
+  // --- FUNCTIONS ---
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -175,7 +177,6 @@ export default function MemberAIAssistant() {
     const currentInputType = attachedFiles.length > 0 ? 'file' : 'text';
     const currentFileName = attachedFiles.length > 0 ? attachedFiles[0].name : null;
 
-    // ✅ FIXED: COMBINE INPUT AND ATTACHED TEXT
     let finalMessage = input;
     if (attachedFiles.length > 0) {
         finalMessage += `\n\nATTACHED WORKOUT CONTEXT:\n` + attachedFiles.map(f => f.extractedText).join("\n");
@@ -192,7 +193,7 @@ export default function MemberAIAssistant() {
     }]);
     
     setInput('');
-    setAttachedFiles([]); // Clear shelf
+    setAttachedFiles([]); 
     setIsLoading(true);
     setTimeout(scrollToBottom, 50);
 
@@ -224,7 +225,6 @@ export default function MemberAIAssistant() {
   const handleFileUpload = async (e: any) => {
     const file = e.target.files[0]; if (!file) return;
 
-    // 🛑 BLOCK WORD DOCUMENTS (Doc/Docx) - AI Incompatibility
     if (file.name.toLowerCase().endsWith('.doc') || file.name.toLowerCase().endsWith('.docx')) {
       alert("⚠️ Word documents (.doc, .docx) are not supported. Please convert your workout to a PDF or copy-paste the text.");
       e.target.value = '';
@@ -240,19 +240,62 @@ export default function MemberAIAssistant() {
     } finally { setIsProcessingMedia(false); e.target.value = ''; }
   };
 
-  const toggleVoice = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return alert("voice not supported");
-    const rec = new SpeechRecognition();
-    rec.lang = 'si-LK'; // ✅ Fixed for Sinhala Support
-    if (!isListening) {
-      rec.start(); setIsListening(true);
-      rec.onresult = (e: any) => { setInput(prev => prev + " " + e.results[0][0].transcript); setIsListening(false); };
-      rec.onerror = () => setIsListening(false);
+  const toggleVoice = async () => {
+    if (isListening) {
+      mediaRecorderRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) audioChunksRef.current.push(event.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        if (audioBlob.size < 1000) return; 
+
+        setIsProcessingMedia(true);
+        const formData = new FormData();
+        formData.append('file', audioBlob, 'voice_input.webm');
+
+        try {
+          const res = await fetch('/api/member/ai/process-media', { method: 'POST', body: formData });
+          const data = await res.json();
+          if (res.ok && data.text) {
+            setInput(prev => (prev + " " + data.text).trim());
+          }
+        } catch (err) {
+          console.error("Voice transcription failed", err);
+        } finally {
+          setIsProcessingMedia(false);
+          stream.getTracks().forEach(track => track.stop());
+        }
+      };
+
+      mediaRecorder.start();
+      setIsListening(true);
+    } catch (err) {
+      alert("Please allow microphone access for voice input.");
+      console.error(err);
     }
   };
 
-  // --- 3. EFFECTS ---
+  // --- SESSION MESSAGE COUNTER ---
+  const [sessionCount, setSessionCount] = useState(0);
+
+  useEffect(() => {
+    const count = messages.filter(m => m.role === 'user').length;
+    setSessionCount(count);
+  }, [messages]);
+
+  // --- 1. FETCH ALL DATA ON LOAD ---
   useEffect(() => {
     const stored = localStorage.getItem('narrow_fitness_user');
     if (!stored) {
@@ -262,7 +305,25 @@ export default function MemberAIAssistant() {
     const parsed = JSON.parse(stored);
     setUser(parsed);
     loadSessions(parsed.id);
+
+    fetchLiveUsage(parsed.id);
   }, [navigate]);
+
+  const fetchLiveUsage = async (uid: number) => {
+    try {
+      const res = await fetch(`/api/member/ai/stats/${uid}`);
+      const data = await res.json();
+      if (res.ok) {
+        setUsageInfo({
+          current: data.current,
+          max: data.max,
+          sessionMax: data.sessionMax
+        });
+      }
+    } catch (e) {
+      console.error("Failed to fetch live usage stats", e);
+    }
+  };
 
   useEffect(() => {
     scrollToBottom();
@@ -383,7 +444,15 @@ export default function MemberAIAssistant() {
               </label>
               
               <div className="flex-1 flex items-center gap-2 bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] px-2 focus-within:border-orange-500 transition-all shadow-sm overflow-hidden">
-                  <input value={input} disabled={limitReached || isLoading} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()} placeholder="message coach..." className="flex-1 bg-transparent py-4 px-3 outline-none font-medium text-sm min-w-0" />
+                  <input 
+                    value={input} 
+                    disabled={limitReached || isLoading} 
+                    onChange={(e) => setInput(e.target.value)} 
+                    onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()} 
+                    placeholder="message coach..." 
+                    className="flex-1 bg-transparent py-4 px-3 outline-none font-bold text-sm min-w-0 placeholder:font-medium placeholder:italic text-slate-800"
+                    style={{ fontFamily: "inherit" }}
+                  />
                   <button onClick={handleSendMessage} disabled={isLoading || (!input.trim() && attachedFiles.length === 0) || limitReached} className="p-2.5 bg-black text-white rounded-xl hover:bg-orange-600 transition-all shrink-0 shadow-lg"><Send className="w-5" /></button>
               </div>
               
@@ -458,17 +527,12 @@ export default function MemberAIAssistant() {
                     <div className="flex items-center gap-3 mb-8 text-orange-600"><ShieldCheck className="w-10 h-10" /><h2 className="text-3xl font-black italic text-slate-900 leading-none">coach hub</h2></div>
                     <div className="space-y-6">
                         <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 shadow-sm">
-                            <div className="flex justify-between items-center mb-4"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">daily session limit:</span><span className="text-sm font-black text-orange-600 uppercase">{usageInfo.max - usageInfo.current} Chats left</span></div>
-                            <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden shadow-inner"><motion.div initial={{ width: 0 }} animate={{ width: `${(usageInfo.current / usageInfo.max) * 100}%` }} className="bg-orange-600 h-full shadow-[0_0_10px_#f97316]" /></div>
-                        </div>
-                        <div className="p-6 bg-orange-50 rounded-3xl border-2 border-orange-100 relative overflow-hidden">
-                            <Zap className="w-16 h-16 text-orange-600 opacity-5 absolute -right-4 -top-4 rotate-12" />
-                            <h4 className="text-[10px] font-black text-orange-600 mb-2 uppercase tracking-widest italic text-center">ai coaching tip</h4>
-                            <p className="text-[12px] text-orange-800 font-bold leading-relaxed italic relative z-10 text-center">ai coaching tip: for 100% accurate coaching, prioritize PDF files or manual text entry. Word documents are not supported. JPG/PNG images are supported but may have limited scan precision.</p><br />
-                            <p className="text-[12px] text-orange-800 font-bold leading-relaxed italic text-center">You can now ask questions in English or Sinhala (සිංහල).</p>
+                            <div className="flex justify-between items-center mb-4"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">2-hour message limit:</span><span className="text-sm font-black text-orange-600 uppercase">{usageInfo.max - usageInfo.current} / {usageInfo.max} Chats left</span></div>
+                            <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden shadow-inner"><motion.div initial={{ width: 0 }} animate={{ width: `${((usageInfo.max - usageInfo.current) / usageInfo.max) * 100}%` }} className="bg-orange-600 h-full shadow-[0_0_10px_#f97316]" /></div>
                         </div>
                         <div className="p-6 bg-slate-900 rounded-3xl text-white relative overflow-hidden shadow-lg border border-white/5">
-                            <p className="text-[12px] font-medium leading-relaxed italic z-10 relative">each session is capped at {usageInfo.sessionMax} messages to maintain neural accuracy. start a new workout chat once a routine is perfected.</p>
+                            <div className="flex justify-between items-center mb-4 relative z-10"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">current session status:</span><span className="text-sm font-black text-orange-500 uppercase">{30 - sessionCount} / 30 left</span></div>
+                            <p className="text-[12px] font-medium leading-relaxed italic z-10 relative">Each session is capped at 30 messages to maintain coaching accuracy. Start a new workout chat once a routine is perfected.</p>
                             <Target className="absolute -bottom-8 -right-8 w-24 h-24 text-white/5 rotate-12" />
                         </div>
                     </div>

@@ -262,15 +262,16 @@ app.get("/api/public/stats", async (req, res) => {
   try {
     const memberResult = await query("SELECT COUNT(*) FROM users WHERE role = 'user'");
     const trainerResult = await query("SELECT COUNT(*) FROM trainers");
-    res.json({ 
-      totalMembers: parseInt(memberResult.rows[0].count), 
-      totalTrainers: parseInt(trainerResult.rows[0].count) 
+    const programResult = await query("SELECT COUNT(*) FROM pricing");
+    res.json({
+      totalMembers: parseInt(memberResult.rows[0].count),
+      totalTrainers: parseInt(trainerResult.rows[0].count),
+      totalPrograms: parseInt(programResult.rows[0].count)
     });
   } catch (err) {
-    res.json({ totalMembers: 0, totalTrainers: 0 });
+    res.json({ totalMembers: 0, totalTrainers: 0, totalPrograms: 0 });
   }
 });
-
 // --- 7. ROUTER REGISTRATION ---
 app.use("/api/admin", adminRouter);
 app.use("/api/member/ai", aiRouter);
@@ -295,7 +296,10 @@ const initDB = async () => {
     await query(`CREATE TABLE IF NOT EXISTS trainers (id SERIAL PRIMARY KEY, name VARCHAR(255), description TEXT, image_url TEXT, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);`);
     
     // AI Persistence Tables
-    await query(`CREATE TABLE IF NOT EXISTS ai_usage (userid INT PRIMARY KEY, daily_count INT DEFAULT 0, last_reset DATE DEFAULT CURRENT_DATE);`);
+    await query(`CREATE TABLE IF NOT EXISTS ai_usage (userid INT PRIMARY KEY, daily_count INT DEFAULT 0, last_reset DATE DEFAULT CURRENT_DATE, last_message_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);`);
+    try {
+      await query("ALTER TABLE ai_usage ADD COLUMN IF NOT EXISTS last_message_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP");
+    } catch (e) { /* ignore */ }
     await query(`CREATE TABLE IF NOT EXISTS chat_history (id SERIAL PRIMARY KEY, userid INT, role VARCHAR(20), message TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
     
     // Attendance Tables

@@ -9,6 +9,7 @@ import {
   Mail, 
   ArrowRight 
 } from 'lucide-react';
+import { GYM_HOURS } from '../lib/gymHours';
 
 export default function Footer() {
   const currentYear = new Date().getFullYear();
@@ -86,11 +87,7 @@ export default function Footer() {
           <div>
             <h4 className="text-sm font-black uppercase tracking-[0.2em] mb-8 italic text-orange-500">Opening Hours</h4>
             <ul className="space-y-4">
-              {[
-                { day: 'Mon - Fri', time: '5:00 AM - 11:00 PM' },
-                { day: 'Saturday', time: '7:00 AM - 10:00 PM' },
-                { day: 'Sunday', time: '6:00 AM - 11:30 PM' },
-              ].map((item, idx) => (
+              {GYM_HOURS.map((item, idx) => (
                 <li key={idx} className="flex flex-col gap-1 border-l-2 border-gray-900 pl-4">
                   <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{item.day}</span>
                   <span className="text-sm text-white font-bold">{item.time}</span>

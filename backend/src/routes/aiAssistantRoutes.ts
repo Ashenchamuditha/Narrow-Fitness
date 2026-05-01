@@ -77,6 +77,63 @@ aiRouter.get("/history/:sessionId", async (req, res) => {
   } catch (err) { res.status(500).json({ messages: [] }); }
 });
 
+// --- NEW: FETCH ACCURATE USAGE STATS ---
+aiRouter.get("/stats/:userId", async (req, res) => {
+  const uid = Number(req.params.userId);
+  try {
+    const dataRes = await query(`
+      SELECT 
+        u.role, 
+        pr.name as package_name,
+        au.daily_count, au.last_message_at 
+      FROM users u
+      LEFT JOIN memberprofiles p ON u.id = p.userid
+      LEFT JOIN pricing pr ON p.package_id = pr.id
+      LEFT JOIN ai_usage au ON u.id = au.userid
+      WHERE u.id = $1`, [uid]);
+    
+    const userData = dataRes?.rows[0];
+    if (!userData) return res.status(404).json({ message: "not found" });
+
+    const safeRole = (userData.role || "").toLowerCase();
+    const safePkg = (userData.package_name || "").toLowerCase();
+
+    // Tiered Limits Logic (DRY - same as /chat)
+    let DAILY_LIMIT = 10; 
+    let SESSION_MAX = 30;
+    
+    if (safeRole === 'admin') {
+      DAILY_LIMIT = 100;
+      SESSION_MAX = 100;
+    } else if (safePkg.includes('personal')) { 
+      DAILY_LIMIT = 35; 
+      SESSION_MAX = 50; 
+    } else if (safePkg.includes('pro')) { 
+      DAILY_LIMIT = 20; 
+      SESSION_MAX = 40; 
+    } else if (safePkg.includes('basic')) {
+      DAILY_LIMIT = 15;
+      SESSION_MAX = 30;
+    }
+
+    const now = new Date();
+    const lastMsgTime = new Date(userData.last_message_at || 0);
+    const hoursPassed = (now.getTime() - lastMsgTime.getTime()) / (1000 * 60 * 60);
+    
+    // If 2 hours passed, current count is effectively 0 for the user's view
+    const effectiveCount = hoursPassed >= 2 ? 0 : (userData.daily_count || 0);
+
+    res.json({
+      current: effectiveCount,
+      max: DAILY_LIMIT,
+      sessionMax: SESSION_MAX,
+      packageName: userData.package_name || 'Free'
+    });
+  } catch (err) {
+    res.status(500).json({ current: 0, max: 10, sessionMax: 30 });
+  }
+});
+
 aiRouter.post("/sessions/new", async (req, res) => {
   const { userId, title } = req.body;
   try {
@@ -248,19 +305,47 @@ aiRouter.post("/chat", async (req, res) => {
     const birthDate = new Date(userData.dob);
     const age = userData.dob ? new Date().getFullYear() - birthDate.getFullYear() : "unknown";
 
-    // Tiered Limits
+    // Tiered Limits (Mapping to Basic, Pro, Personal Training)
     let DAILY_LIMIT = 10; 
     let SESSION_MAX = 30;
-    if (safeRole === 'admin') DAILY_LIMIT = 100;
-    else if (safeRole.includes('pro')) { DAILY_LIMIT = 20; SESSION_MAX = 50; }
-    else if (safePkg.includes('personal') || safePkg.includes('elite')) { DAILY_LIMIT = 35; SESSION_MAX = 50; }
+    
+    if (safeRole === 'admin') {
+      DAILY_LIMIT = 100;
+      SESSION_MAX = 100;
+    } else if (safePkg.includes('personal')) { 
+      DAILY_LIMIT = 35; 
+      SESSION_MAX = 50; 
+    } else if (safePkg.includes('pro')) { 
+      DAILY_LIMIT = 20; 
+      SESSION_MAX = 40; 
+    } else if (safePkg.includes('basic')) {
+      DAILY_LIMIT = 15;
+      SESSION_MAX = 30;
+    }
 
     // Quota and Cooldown checks
     const now = new Date();
     const lastMsgTime = new Date(userData.last_message_at || 0);
     const hoursPassed = (now.getTime() - lastMsgTime.getTime()) / (1000 * 60 * 60);
-    if (userData.daily_count >= DAILY_LIMIT && hoursPassed < 24) {
-        return res.status(403).json({ message: "Daily quota exhausted. It resets every 24 hours." });
+    
+    // Change reset to 2 hours as requested
+    if (userData.daily_count >= DAILY_LIMIT && hoursPassed < 2) {
+        return res.status(403).json({ 
+          message: `Daily quota exhausted (${DAILY_LIMIT} messages). It resets every 2 hours.` 
+        });
+    }
+
+    // --- SESSION MESSAGE COUNT CHECK ---
+    const sessionHistoryRes = await query("SELECT COUNT(*) FROM chat_history WHERE session_id = $1 AND role = 'user'", [sessionId]);
+    const sessionMsgCount = parseInt(sessionHistoryRes.rows[0].count);
+    
+    // Strict 30 message limit per session (except for Admin)
+    const CURRENT_SESSION_MAX = safeRole === 'admin' ? 100 : 30;
+    
+    if (sessionMsgCount >= CURRENT_SESSION_MAX) {
+      return res.status(422).json({ 
+        message: `Session limit reached (${CURRENT_SESSION_MAX} messages). To maintain coaching accuracy, please start a new workout session.` 
+      });
     }
 
     // Fetch Active Workout Cache
@@ -354,14 +439,25 @@ STRICT OPERATIONAL RULES:
 
     const responseText = data.choices[0].message.content;
 
-    // SAVE & UPDATE
+    // SAVE & UPDATE (Bulletproof Upsert for New Users)
     await query("INSERT INTO chat_history (userid, role, message, session_id, input_type, file_name) VALUES ($1, 'user', $2, $3, $4, $5)", [uid, message, sessionId, inputType || 'text', fileName || null]);
     await query("INSERT INTO chat_history (userid, role, message, session_id, input_type) VALUES ($1, 'model', $2, $3, 'text')", [uid, responseText, sessionId]);
     
-    const resetCount = hoursPassed >= 24 ? 1 : Number(userData.daily_count) + 1;
-    await query("UPDATE ai_usage SET daily_count = $1, last_message_at = NOW() WHERE userid = $2", [resetCount, uid]);
+    // Reset count logic synchronized with 2-hour window
+    const resetCount = hoursPassed >= 2 ? 1 : Number(userData.daily_count || 0) + 1;
+    
+    await query(`
+      INSERT INTO ai_usage (userid, daily_count, last_message_at) 
+      VALUES ($1, $2, NOW())
+      ON CONFLICT (userid) 
+      DO UPDATE SET daily_count = $2, last_message_at = NOW()
+    `, [uid, resetCount]);
 
-    res.json({ text: responseText, usage: { current: resetCount, max: DAILY_LIMIT } });
+    // LOG USER USAGE
+    console.log(`👤 User: ${uid} | Package: ${userData.package_name || 'Free'} | Session: ${sessionMsgCount + 1}/${CURRENT_SESSION_MAX} | Used: ${resetCount}/${DAILY_LIMIT} | Left: ${Math.max(0, DAILY_LIMIT - resetCount)}`);
+    console.log(`-------------------------------------------`);
+
+    res.json({ text: responseText, usage: { current: resetCount, max: DAILY_LIMIT, sessionMax: SESSION_MAX } });
 
   } catch (err: any) {
     res.status(500).json({ message: "the ai coach is busy. try again shortly." });

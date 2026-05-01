@@ -2,9 +2,10 @@ import { motion } from 'framer-motion';
 import { ChevronRight, Dumbbell, Users, Trophy, Star, Zap } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom'; // Added useLocation
 import { useState, useEffect } from 'react';
+import { isGymOpen } from '../lib/gymHours';
 
 export default function Hero() {
-  const [stats, setStats] = useState({ members: 0, trainers: 0 });
+  const [stats, setStats] = useState({ members: 0, trainers: 0, programs: 0 });
   const location = useLocation(); // Hook to detect URL changes
 
   // --- 1. SCROLL TO TOP LOGIC (Enhanced to work on every 'Home' click) ---
@@ -36,7 +37,8 @@ export default function Hero() {
       .then(data => {
         setStats({
           members: data.totalMembers || 0,
-          trainers: data.totalTrainers || 0
+          trainers: data.totalTrainers || 0,
+          programs: data.totalPrograms || 0
         });
       })
       .catch(err => console.error("Error fetching live stats:", err));
@@ -120,8 +122,8 @@ export default function Hero() {
             {[
               { label: 'Active Athletes', value: stats.members, icon: Users },
               { label: 'Pro Trainers', value: stats.trainers, icon: Star },
-              { label: 'Elite Gear', value: 'Modern', icon: Dumbbell },
-              { label: 'Status', value: 'Open', icon: Trophy },
+              { label: 'Elite Programs', value: stats.programs, icon: Dumbbell },
+              { label: 'Status', value: isGymOpen() ? 'Open' : 'Closed', icon: Trophy },
             ].map((stat, i) => (
               <motion.div
                 key={stat.label}
