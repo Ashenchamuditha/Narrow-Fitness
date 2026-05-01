@@ -6,7 +6,16 @@ import { isGymOpen } from '../lib/gymHours';
 
 export default function Hero() {
   const [stats, setStats] = useState({ members: 0, trainers: 0, programs: 0 });
-  const location = useLocation(); // Hook to detect URL changes
+  const [isOpen, setIsOpen] = useState(isGymOpen());
+  const location = useLocation();
+
+  // Update gym status every minute
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setIsOpen(isGymOpen());
+    }, 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   // --- 1. SCROLL TO TOP LOGIC (Enhanced to work on every 'Home' click) ---
   useEffect(() => {
@@ -123,7 +132,12 @@ export default function Hero() {
               { label: 'Active Athletes', value: stats.members, icon: Users },
               { label: 'Pro Trainers', value: stats.trainers, icon: Star },
               { label: 'Elite Programs', value: stats.programs, icon: Dumbbell },
-              { label: 'Status', value: isGymOpen() ? 'Open' : 'Closed', icon: Trophy },
+              { 
+                label: 'Status', 
+                value: isOpen ? 'Open' : 'Closed', 
+                icon: Trophy,
+                color: isOpen ? 'text-green-500' : 'text-red-500'
+              },
             ].map((stat, i) => (
               <motion.div
                 key={stat.label}
@@ -134,10 +148,10 @@ export default function Hero() {
                 className="flex items-center gap-4 group"
               >
                 <div className="w-10 h-10 md:w-12 md:h-12 bg-white/5 rounded-xl flex items-center justify-center border border-white/10 group-hover:border-orange-500/50 transition-colors">
-                   <stat.icon className="w-5 h-5 md:w-6 md:h-6 text-orange-500" />
+                   <stat.icon className={`w-5 h-5 md:w-6 md:h-6 ${stat.color || 'text-orange-500'}`} />
                 </div>
                 <div>
-                  <div className="text-xl md:text-2xl font-black text-white leading-none">
+                  <div className={`text-xl md:text-2xl font-black leading-none ${stat.color || 'text-white'}`}>
                     {stat.value || '0'}
                   </div>
                   <div className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mt-1">
