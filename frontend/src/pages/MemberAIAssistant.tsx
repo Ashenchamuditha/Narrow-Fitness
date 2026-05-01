@@ -269,7 +269,8 @@ export default function MemberAIAssistant() {
           const res = await fetch('/api/member/ai/process-media', { method: 'POST', body: formData });
           const data = await res.json();
           if (res.ok && data.text) {
-            setInput(prev => (prev + " " + data.text).trim());
+            // Preview the exact transcription in the input field before sending
+            setInput(data.text);
           }
         } catch (err) {
           console.error("Voice transcription failed", err);
@@ -285,6 +286,54 @@ export default function MemberAIAssistant() {
       alert("Please allow microphone access for voice input.");
       console.error(err);
     }
+  };
+
+  const handleSendVoiceMessage = async (voiceText: string) => {
+    if (!voiceText.trim() || isLoading || limitReached) return;
+
+    const currentInputType = 'voice';
+    
+    const userMsgId = Date.now();
+    setMessages(prev => [...prev, { 
+        role: 'user', 
+        text: voiceText, 
+        id: userMsgId, 
+        createdAt: new Date(),
+        inputType: currentInputType
+    }]);
+    
+    setInput('');
+    setIsLoading(true);
+    setTimeout(scrollToBottom, 50);
+
+    try {
+      const res = await fetch('/api/member/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          userId: user.id, 
+          message: voiceText, 
+          sessionId: currentSid, 
+          inputType: currentInputType 
+        })
+      });
+      const data = await res.json();
+      
+      if (res.ok) {
+        setMessages(prev => [...prev, { role: 'model', text: data.text, id: Date.now() + 1, createdAt: new Date() }]);
+        if (data.usage) {
+            setUsageInfo({
+              current: data.usage.current,
+              max: data.usage.max,
+              sessionMax: data.usage.sessionMax
+            });
+        }
+      } else if (res.status === 403 || res.status === 422) {
+        setLimitReached(true); setLockMessage(data.message);
+      }
+    } catch (error) {
+        console.error("AI Analysis Failed");
+    } finally { setIsLoading(false); setTimeout(scrollToBottom, 150); }
   };
 
   // --- SESSION MESSAGE COUNTER ---

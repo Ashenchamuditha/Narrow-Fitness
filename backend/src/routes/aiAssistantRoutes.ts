@@ -222,6 +222,9 @@ aiRouter.post("/process-media", upload.single('file'), async (req: any, res: Res
       });
       const whisperData: any = await whisperRes.json();
       rawText = whisperData.text || "";
+      
+      // FOR VOICE: Return raw text immediately without summary to avoid "reasoning" or summary in input
+      return res.json({ text: rawText, fileName, type: 'voice' });
     }
 
     if (!rawText || rawText.trim().length === 0) throw new Error("Extraction resulted in empty text.");
@@ -379,10 +382,12 @@ FACTS ABOUT THE ATHLETE:
 - Context: ${workoutContext}
 
 STRICT LANGUAGE PROTOCOL:
-1. If the user speaks English or provides an English phonetic transcription (like "Hello how are you"), respond in English,never use singlish.
-2. use Sinhala script (සිංහල අකුරෙන්) if the user is asking a question that is clearly intended to be answered in Sinhala and singlish as well with sinhala script response with understandable way, never use singlish responds.
-3. NEVER repeat yourself. Be professional and direct.
-4. English for English. Professional and motivating tone.
+1. DETECT: Identify if the user is speaking English or Sinhala/Singlish.
+2. ENGLISH: If user speaks English, respond ONLY in English.
+3. SINHALA: If user speaks Sinhala OR Singlish (phonetic Sinhala like "kohomada"), respond ONLY in Sinhala Script (සිංහල අකුරෙන්).
+4. NO SINGLISH: Never respond using Singlish (phonetic Sinhala). Always use proper Sinhala Script or English.
+5. PROFESSIONALISM: Maintain a professional, motivating coaching tone in both languages.
+6. CLARITY: Use simple and direct language to ensure the athlete understands the instructions clearly.
 
 STRICT OPERATIONAL RULES:
 1. GREETINGS: Warmly mention readiness for their workout plan.
