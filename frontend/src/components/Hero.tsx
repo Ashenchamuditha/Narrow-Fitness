@@ -1,7 +1,8 @@
 import { motion } from 'framer-motion';
 import { ChevronRight, Dumbbell, Users, Trophy, Star, Zap } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom'; // Added useLocation
+import { Link, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import { io } from 'socket.io-client';
 import { isGymOpen } from '../lib/gymHours';
 
 export default function Hero() {
@@ -17,40 +18,46 @@ export default function Hero() {
     return () => clearInterval(timer);
   }, []);
 
-  // --- 1. SCROLL TO TOP LOGIC (Enhanced to work on every 'Home' click) ---
+  // --- 1. SCROLL TO TOP LOGIC ---
   useEffect(() => {
-    // This stops the browser from automatically jumping to the last scroll position
     if ('scrollRestoration' in window.history) {
       window.history.scrollRestoration = 'manual';
     }
-
-    // Scroll to top immediately when the location changes to "/"
     if (location.pathname === '/') {
-      window.scrollTo({
-        top: 0,
-        left: 0,
-        behavior: 'instant' // 'instant' gives a "refreshed" feel, 'smooth' is animated
-      });
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     }
-
-    // Optional: Clear the #hash from the URL so it doesn't stay there after refresh
     if (window.location.hash) {
       window.history.replaceState(null, '', window.location.pathname);
     }
-  }, [location]); // Now triggers every time the user clicks a Nav link
+  }, [location]);
 
-  // --- 2. FETCH LIVE STATS FROM DB ---
+  // --- 2. FETCH LIVE STATS & SOCKET SYNC ---
   useEffect(() => {
-    fetch('/api/public/stats')
-      .then(res => res.json())
-      .then(data => {
-        setStats({
-          members: data.totalMembers || 0,
-          trainers: data.totalTrainers || 0,
-          programs: data.totalPrograms || 0
-        });
-      })
-      .catch(err => console.error("Error fetching live stats:", err));
+    const fetchStats = () => {
+      fetch('/api/public/stats')
+        .then(res => res.json())
+        .then(data => {
+          setStats({
+            members: data.totalMembers || 0,
+            trainers: data.totalTrainers || 0,
+            programs: data.totalPrograms || 0
+          });
+        })
+        .catch(err => console.error("Error fetching live stats:", err));
+    };
+
+    fetchStats();
+
+    // Socket Connection
+    const socket = io();
+    socket.on('silent_public_refresh', () => {
+      console.log('📡 Real-time Stats Sync Triggered');
+      fetchStats();
+    });
+
+    return () => {
+      socket.disconnect();
+    };
   }, []);
 
   return (

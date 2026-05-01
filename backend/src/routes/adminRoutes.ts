@@ -23,6 +23,15 @@ transporter.verify((error) => {
 
 const adminRouter = Router();
 
+// Helper to emit public refresh
+const emitPublicRefresh = (req: any) => {
+  const io = req.app.get("socketio");
+  if (io) {
+    console.log("📡 Emitting silent_public_refresh");
+    io.emit("silent_public_refresh");
+  }
+};
+
 // Fetch all members for admin dashboard
 adminRouter.get("/users", async (req, res) => {
   try {
@@ -51,6 +60,7 @@ adminRouter.put("/users/:id", async (req, res) => {
       return res.status(404).json({ message: "Member not found" });
     }
 
+    emitPublicRefresh(req);
     res.json(result.rows[0]); // Returns updated user object
   } catch (err: any) {
     console.error("Edit Error:", err.message);
@@ -71,6 +81,9 @@ adminRouter.delete("/users/:id", async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Member not found" });
     }
+
+    // REAL-TIME SYNC
+    emitPublicRefresh(req);
 
     res.json({ success: true, message: "Member and profile deleted successfully" });
   } catch (err: any) {
@@ -124,69 +137,6 @@ adminRouter.get("/stats", async (req, res) => {
     res.status(500).json({ totalMembers: 0, totalTrainers: 0, totalClasses: 0, totalPackages: 0 });
   }
 });
-// 1. Fetch ALL users for Manage Members page
-adminRouter.get("/users", async (req, res) => {
-  try {
-    const result = await query(
-      "SELECT id, name, email, role, created_at FROM users ORDER BY created_at ASC"
-    );
-    res.json(result.rows);
-  } catch (err: any) {
-    res.status(500).json({ message: "Database error fetching all users" });
-  }
-});
-
-
-// This combined with "/api/admin" makes "/api/admin/users"
-
-// 2. Fetch 5 most recent for Dashboard
-adminRouter.get("/users/recent", async (req, res) => {
-  try {
-    const result = await query(
-      "SELECT id, name, email, role, created_at FROM users ORDER BY created_at DESC LIMIT 5"
-    );
-    res.json(result.rows);
-  } catch (err: any) {
-    res.status(500).json({ message: "Error fetching recent users" });
-  }
-});
-
-// 3. Stats for Dashboard Cards
-adminRouter.get("/stats", async (req, res) => {
-  try {
-    const userCount = await query("SELECT COUNT(*) FROM users");
-    
-    // Safety check for tables that might not exist yet
-    let totalTrainers = 0;
-    let totalClasses = 0;
-    let totalPackages = 0; // Initialize new variable
-
-    try {
-        const tr = await query("SELECT COUNT(*) FROM trainers");
-        totalTrainers = parseInt(tr.rows[0].count);
-    } catch (e) { console.log("Trainers table not ready"); }
-    
-    try {
-        const cl = await query("SELECT COUNT(*) FROM classes");
-        totalClasses = parseInt(cl.rows[0].count);
-    } catch (e) { console.log("Classes table not ready"); }
-
-    // --- NEW: FETCH TOTAL PRICING PACKAGES ---
-    try {
-        const pr = await query("SELECT COUNT(*) FROM pricing");
-        totalPackages = parseInt(pr.rows[0].count);
-    } catch (e) { console.log("Pricing table not ready"); }
-
-    res.json({
-      totalMembers: parseInt(userCount.rows[0].count) || 0,
-      totalTrainers: totalTrainers,
-      totalClasses: totalClasses,
-      totalPackages: totalPackages 
-    });
-  } catch (err: any) {
-    res.status(500).json({ message: "Error fetching stats" });
-  }
-});
 
 // 4. Add new member (user)
 adminRouter.post("/members", async (req, res) => {
@@ -217,6 +167,10 @@ adminRouter.post("/members", async (req, res) => {
       [name, email, hashedPassword, role || 'user']
     );
     console.log("✅ Member created with ID:", result.rows[0].id);
+
+    // REAL-TIME SYNC
+    emitPublicRefresh(req);
+
     res.status(201).json(result.rows[0]);
   } catch (err: any) {
     console.error("❌ POST /members failed:", err);
@@ -249,6 +203,10 @@ adminRouter.post("/trainers", async (req, res) => {
       "INSERT INTO trainers (name, description, image_url, contact) VALUES ($1, $2, $3, $4) RETURNING *",
       [name, description, image_url || null, contact || null]
     );
+
+    // REAL-TIME SYNC
+    emitPublicRefresh(req);
+
     res.status(201).json(result.rows[0]);
   } catch (err: any) {
     console.error("❌ Trainer POST failed:", err.message);
@@ -280,6 +238,7 @@ adminRouter.put("/trainers/:id", async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Trainer not found" });
     }
+    emitPublicRefresh(req);
     res.json(result.rows[0]);
   } catch (err: any) {
     res.status(500).json({ message: "Update failed: " + err.message });
@@ -305,6 +264,8 @@ adminRouter.delete("/trainers/:id", async (req, res) => {
 
     const trainerName = result.rows[0].name;
     console.log(`✅ [Backend] SUCCESS: Trainer "${trainerName}" has been removed.`);
+
+    emitPublicRefresh(req);
 
     res.json({ 
       success: true, 
@@ -350,6 +311,7 @@ adminRouter.post("/classes", async (req, res) => {
       "INSERT INTO classes (name, trainer_id, class_time, class_day, capacity, is_cancelled) VALUES ($1, $2, $3, $4, $5, false) RETURNING *",
       [name, trainer_id, class_time, class_day, capacity]
     );
+    emitPublicRefresh(req);
     res.status(201).json(result.rows[0]);
   } catch (err: any) {
     res.status(500).json({ message: "Database error creating class", error: err.message });
@@ -382,6 +344,7 @@ adminRouter.put("/classes/:id", async (req, res) => {
     }
 
     console.log(`✅ [Backend] Class ${id} updated successfully.`);
+    emitPublicRefresh(req);
     res.json(result.rows[0]);
   } catch (err: any) {
     console.error('❌ [Backend] PUT /classes failed:', err.message);
@@ -395,6 +358,7 @@ adminRouter.delete("/classes/:id", async (req, res) => {
   try {
     const result = await query("DELETE FROM classes WHERE id = $1 RETURNING *", [id]);
     if (result.rows.length === 0) return res.status(404).json({ message: "Class not found" });
+    emitPublicRefresh(req);
     res.json({ message: "Class deleted successfully" });
   } catch (err: any) {
     res.status(500).json({ message: "Database error deleting class", error: err.message });
@@ -423,6 +387,7 @@ adminRouter.post("/pricing", async (req, res) => {
       "INSERT INTO pricing (name, price, duration, features, is_popular) VALUES ($1, $2, $3, $4, $5) RETURNING *",
       [name, price, duration || 'Month', features || [], is_popular || false]
     );
+    emitPublicRefresh(req);
     res.status(201).json(result.rows[0]);
   } catch (err: any) {
     console.error('Backend: [POST /api/admin/pricing] Error:', err);
@@ -441,6 +406,7 @@ adminRouter.put("/pricing/:id", async (req, res) => {
       [name, price, duration, features, is_popular, id]
     );
     if (result.rows.length === 0) return res.status(404).json({ message: "Pricing plan not found" });
+    emitPublicRefresh(req);
     res.json(result.rows[0]);
   } catch (err: any) {
     console.error('Backend: [PUT /api/admin/pricing] Error:', err);
@@ -455,6 +421,7 @@ adminRouter.delete("/pricing/:id", async (req, res) => {
     console.log(`Backend: [DELETE /api/admin/pricing/${id}] Deleting pricing plan...`);
     const result = await query("DELETE FROM pricing WHERE id = $1 RETURNING *", [id]);
     if (result.rows.length === 0) return res.status(404).json({ message: "Pricing plan not found" });
+    emitPublicRefresh(req);
     res.json({ message: "Pricing plan deleted successfully" });
   } catch (err: any) {
     console.error('Backend: [DELETE /api/admin/pricing] Error:', err);
@@ -518,7 +485,6 @@ adminRouter.get("/member/profile/:userId", async (req, res) => {
     res.status(500).json({ message: "Error fetching profile", error: err.message });
   }
 });
-// class bookings for a member
 
 // --- ADMIN: FETCH BOOKINGS FOR A SPECIFIC CLASS ---
 adminRouter.get("/classes/:id/bookings", async (req, res) => {
@@ -526,8 +492,6 @@ adminRouter.get("/classes/:id/bookings", async (req, res) => {
   console.log(`[Backend] Fetching registration requests for Class ID: ${id}`);
 
   try {
-    // We join 'class_bookings' with 'users' to get the member's Name and Email
-    // CRITICAL: Ensure column names 'userid' and 'id' match your tables
     const result = await query(`
       SELECT 
         b.id AS booking_id, 
@@ -655,53 +619,9 @@ adminRouter.delete("/classes/bookings/:id", async (req, res) => {
     res.status(500).json({ message: "Internal error during removal" });
   }
 });
-//real time updates 
-
-// adminRoutes.ts
-
-// Approve Booking
-adminRouter.put("/bookings/confirm/:id", async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    const result = await query(
-      "UPDATE bookings SET status = 'confirmed' WHERE id = $1 RETURNING user_id, class_id",
-      [id]
-    );
-    
-    if (result.rows.length > 0) {
-      const { user_id } = result.rows[0];
-
-      // REAL-TIME NOTIFICATION TO MEMBER
-      const io = req.app.get("socketio");
-      
-      // We send a message that the frontend member dashboard listens to
-      io.emit("member_update", {
-        targetUserId: user_id,
-        type: "BOOKING_CONFIRMED",
-        message: "Your class seat has been confirmed!"
-      });
-      
-      res.json({ message: "Confirmed and user notified live!" });
-    }
-  } catch (err) {
-    res.status(500).json({ message: "Error" });
-  }
-});
-adminRouter.put("/bookings/confirm/:id", async (req, res) => {
-  // ... your update logic ...
-  
-  // SILENT SIGNAL: Tell Members to refresh their class cards
-  const io = req.app.get("socketio");
-  io.emit("silent_member_refresh"); 
-
-  res.status(200).json({ success: true });
-});
 
 // --- INQUIRIES MANAGEMENT ---
 
-// 1. Fetch all inquiries
-// Path: GET /api/admin/inquiries
 adminRouter.get("/inquiries", async (req, res) => {
   try {
     const result = await query(
@@ -714,8 +634,6 @@ adminRouter.get("/inquiries", async (req, res) => {
   }
 });
 
-// 2. Mark inquiry as read
-// Path: PUT /api/admin/inquiries/:id/read
 adminRouter.put("/inquiries/:id/read", async (req, res) => {
   const { id } = req.params;
   try {
@@ -731,8 +649,6 @@ adminRouter.put("/inquiries/:id/read", async (req, res) => {
   }
 });
 
-// 3. Delete an inquiry
-// Path: DELETE /api/admin/inquiries/:id
 adminRouter.delete("/inquiries/:id", async (req, res) => {
   const { id } = req.params;
   try {
@@ -744,8 +660,6 @@ adminRouter.delete("/inquiries/:id", async (req, res) => {
   }
 });
 
-// 4. Get Inquiry Stats (Total and Unread)
-// Path: GET /api/admin/stats/inquiries
 adminRouter.get("/stats/inquiries", async (req, res) => {
     try {
       const result = await query(`
@@ -763,7 +677,9 @@ adminRouter.get("/stats/inquiries", async (req, res) => {
       res.status(500).json({ total: 0, unread: 0 });
     }
 });
-// Fetch gallery items
+
+// --- GALLERY MANAGEMENT ---
+
 adminRouter.get("/gallery", async (req, res) => {
   try {
     const result = await query("SELECT * FROM gallery ORDER BY created_at DESC");
@@ -773,7 +689,6 @@ adminRouter.get("/gallery", async (req, res) => {
   }
 });
 
-// Add new gallery item
 adminRouter.post("/gallery", async (req, res) => {
   const { title, description, image_url } = req.body;
   try {
@@ -792,7 +707,6 @@ adminRouter.post("/gallery", async (req, res) => {
   }
 });
 
-// Delete gallery item
 adminRouter.delete("/gallery/:id", async (req, res) => {
   try {
     await query("DELETE FROM gallery WHERE id = $1", [req.params.id]);
@@ -801,8 +715,7 @@ adminRouter.delete("/gallery/:id", async (req, res) => {
     res.status(500).json({ message: "Delete failed" });
   }
 });
-// --- UPDATE GALLERY ITEM ---
-// URL: PUT /api/admin/gallery/:id
+
 adminRouter.put("/gallery/:id", async (req, res) => {
   const { id } = req.params;
   const { title, description, image_url } = req.body;
@@ -823,12 +736,13 @@ adminRouter.put("/gallery/:id", async (req, res) => {
     res.status(500).json({ message: "Failed to update gallery item" });
   }
 });
-// adminRouter.post("/broadcast-email", ...)
+
+// --- BROADCAST ---
+
 adminRouter.post("/broadcast-email", async (req, res) => {
   const { subject, message } = req.body;
 
   try {
-    // 1. Fetch all user emails
     const members = await query("SELECT email, name FROM users WHERE role = 'user'");
     
     if (members.rows.length === 0) {
@@ -839,9 +753,6 @@ adminRouter.post("/broadcast-email", async (req, res) => {
     let failureCount = 0;
     const failures: string[] = [];
 
-    console.log(`📢 Starting broadcast to ${members.rows.length} members...`);
-
-    // 2. Loop through members
     for (const member of members.rows) {
       try {
         await transporter.sendMail({
@@ -870,12 +781,8 @@ adminRouter.post("/broadcast-email", async (req, res) => {
       } catch (mailErr: any) {
         failureCount++;
         failures.push(`${member.email}: ${mailErr.message}`);
-        console.error(`❌ Failed to send to ${member.email}:`, mailErr.message);
       }
     }
-
-    // 3. Final Report
-    console.log(`✅ Broadcast Finished. Success: ${successCount}, Failures: ${failureCount}`);
 
     if (failureCount > 0) {
       res.json({ 
@@ -889,10 +796,10 @@ adminRouter.post("/broadcast-email", async (req, res) => {
     }
 
   } catch (err: any) {
-    console.error("❌ CRITICAL BROADCAST ERROR:", err.message);
     res.status(500).json({ message: "Could not initiate broadcast. Check server logs." });
   }
 });
+
 // --- ADMIN: PAYMENTS & MEMBERS ---
 
 adminRouter.get("/payments", async (req, res) => {

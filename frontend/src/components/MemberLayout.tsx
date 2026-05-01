@@ -152,6 +152,7 @@ export default function MemberLayout({ children, fullWidth = false }: MemberLayo
         )}
       </AnimatePresence>
 
+      {/* --- TOP NAVBAR --- */}
       <nav className="fixed top-0 left-0 w-full z-50 bg-black text-white shadow-xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
@@ -170,6 +171,7 @@ export default function MemberLayout({ children, fullWidth = false }: MemberLayo
               </div>
             </button>
 
+            {/* DESKTOP NAV LINKS */}
             <div className="hidden lg:flex items-center gap-2">
               {navLinks.map((link) => (
                 link.id === 'dashboard' ? (
@@ -198,6 +200,7 @@ export default function MemberLayout({ children, fullWidth = false }: MemberLayo
               ))}
             </div>
 
+            {/* TOP BAR ACTIONS */}
             <div className="flex items-center gap-4">
               <button className="relative text-gray-400 hover:text-white p-2 bg-white/5 rounded-xl border border-white/10 transition-colors cursor-pointer">
                 <Bell className="w-5 h-5" />
@@ -285,40 +288,40 @@ export default function MemberLayout({ children, fullWidth = false }: MemberLayo
                   )}
                 </AnimatePresence>
               </div>
-
-              <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="lg:hidden p-2 text-gray-400 hover:text-white bg-white/5 rounded-xl cursor-pointer">
-                {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-              </button>
             </div>
           </div>
         </div>
-
-        <AnimatePresence>
-          {isMobileMenuOpen && (
-            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="lg:hidden bg-black border-t border-white/5 overflow-hidden">
-              <div className="px-4 py-6 space-y-2">
-                {navLinks.map((link) => (
-                  <button 
-                    key={link.id} 
-                    onClick={(e) => {
-                      setIsMobileMenuOpen(false);
-                      if(link.id === 'dashboard') handleHomeClick(e);
-                      else navigate(link.path);
-                    }} 
-                    className={`flex items-center w-full gap-4 px-4 py-4 rounded-xl font-bold uppercase text-[10px] tracking-widest transition-all cursor-pointer ${
-                      location.pathname === link.path ? 'bg-orange-600 text-white shadow-lg' : 'text-gray-400 hover:bg-white/5'
-                    }`}
-                  >
-                    <link.icon className="w-4 h-4" /> {link.name}
-                  </button>
-                ))}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </nav>
 
-      <main className={`pt-28 pb-12 px-4 sm:px-6 lg:px-8 mx-auto ${fullWidth ? 'max-w-none' : 'max-w-7xl'}`}>
+      {/* --- MOBILE BOTTOM NAVIGATION --- */}
+      <nav className="lg:hidden fixed bottom-0 left-0 w-full z-50 bg-black/90 backdrop-blur-lg border-t border-white/10 px-4 pb-safe pt-2">
+        <div className="flex justify-between items-center max-w-lg mx-auto h-16">
+          {navLinks.map((link) => {
+            const isActive = location.pathname === link.path;
+            return (
+              <button
+                key={link.id}
+                onClick={(e) => {
+                  if (link.id === 'dashboard') handleHomeClick(e);
+                  else navigate(link.path);
+                }}
+                className={`flex flex-col items-center justify-center gap-1 transition-all flex-1 ${
+                  isActive ? 'text-orange-500' : 'text-gray-500'
+                }`}
+              >
+                <div className={`p-2 rounded-xl transition-all ${isActive ? 'bg-orange-500/10' : ''}`}>
+                  <link.icon className={`w-5 h-5 ${isActive ? 'stroke-[2.5px]' : 'stroke-[2px]'}`} />
+                </div>
+                <span className="text-[8px] font-black uppercase tracking-widest truncate w-full text-center">
+                  {link.id === 'dashboard' ? 'Hub' : link.name.split(' ')[0]}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+
+      <main className={`pt-28 pb-32 lg:pb-12 px-4 sm:px-6 lg:px-8 mx-auto ${fullWidth ? 'max-w-none' : 'max-w-7xl'}`}>
         {membership?.status === 'blocked' && location.pathname !== '/member/payments' ? (
           <div className="flex flex-col items-center justify-center py-20 bg-white rounded-[2.5rem] border-2 border-red-100 shadow-xl">
              <div className="w-20 h-20 bg-red-50 rounded-3xl flex items-center justify-center mb-6">
