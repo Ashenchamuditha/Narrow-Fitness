@@ -528,10 +528,17 @@ export default function MemberAIAssistant() {
                     <div className="space-y-6">
                         <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 shadow-sm">
                             <div className="flex justify-between items-center mb-4"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">2-hour message limit:</span><span className="text-sm font-black text-orange-600 uppercase">{usageInfo.max - usageInfo.current} / {usageInfo.max} Chats left</span></div>
-                            <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden shadow-inner"><motion.div initial={{ width: 0 }} animate={{ width: `${((usageInfo.max - usageInfo.current) / usageInfo.max) * 100}%` }} className="bg-orange-600 h-full shadow-[0_0_10px_#f97316]" /></div>
+                            <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden shadow-inner"><motion.div initial={{ width: 0 }} animate={{ width: `${(usageInfo.current / usageInfo.max) * 100}%` }} className="bg-orange-600 h-full shadow-[0_0_10px_#f97316]" /></div>
                         </div>
                         <div className="p-6 bg-slate-900 rounded-3xl text-white relative overflow-hidden shadow-lg border border-white/5">
                             <div className="flex justify-between items-center mb-4 relative z-10"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">current session status:</span><span className="text-sm font-black text-orange-500 uppercase">{30 - sessionCount} / 30 left</span></div>
+                            <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden mb-4 relative z-10">
+                                <motion.div 
+                                    initial={{ width: 0 }} 
+                                    animate={{ width: `${(sessionCount / 30) * 100}%` }} 
+                                    className="bg-orange-500 h-full shadow-[0_0_10px_#f97316]" 
+                                />
+                            </div>
                             <p className="text-[12px] font-medium leading-relaxed italic z-10 relative">Each session is capped at 30 messages to maintain coaching accuracy. Start a new workout chat once a routine is perfected.</p>
                             <Target className="absolute -bottom-8 -right-8 w-24 h-24 text-white/5 rotate-12" />
                         </div>
