@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import MemberLayout from '../components/MemberLayout';
 import { Settings, Save, Shield, Bell, Globe, User, Camera, Activity, HeartPulse, Target, Phone, MapPin, Calendar } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 
 export default function MemberSettings() {
   const [user, setUser] = useState<any>(null);
@@ -28,7 +29,7 @@ export default function MemberSettings() {
       localStorage.setItem('narrow_fitness_user', JSON.stringify(updatedUser));
       setUser(updatedUser);
       setIsSaving(false);
-      alert('Profile updated successfully!');
+      toast.success('Profile updated successfully!');
     }, 1000);
   };
 
@@ -267,4 +268,3 @@ export default function MemberSettings() {
     </MemberLayout>
   );
 }
-

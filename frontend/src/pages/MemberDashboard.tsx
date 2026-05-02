@@ -30,6 +30,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
 import MemberLayout from '../components/MemberLayout';
 
 export default function MemberDashboard() {
@@ -47,7 +48,6 @@ export default function MemberDashboard() {
   const [isScanning, setIsScanning] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   
-  const [notification, setNotification] = useState<{message: string, type: 'success' | 'error' | 'warning'} | null>(null);
   const [isBmiModalOpen, setIsBmiModalOpen] = useState(false);
   const [bmiInputs, setBmiInputs] = useState({ weight: '', height: '' });
   const [bmiResult, setBmiResult] = useState<string | null>(null);
@@ -55,11 +55,6 @@ export default function MemberDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
   const scannerRef = useRef<Html5Qrcode | null>(null);
-
-  const showNotification = (message: string, type: 'success' | 'error' | 'warning') => {
-    setNotification({ message, type });
-    setTimeout(() => setNotification(null), 4000);
-  };
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -208,18 +203,15 @@ export default function MemberDashboard() {
         stopScanner();
         setIsScanModalOpen(false);
         setIsScanning(false);
-        showNotification(
-          attendanceStatus ? "Check-out confirmed. Great session!" : "Check-in successful. Welcome to the gym!", 
-          "success"
-        );
+        toast.success(attendanceStatus ? "Check-out confirmed. Great session!" : "Check-in successful. Welcome to the gym!");
       } else {
         console.error("❌ Attendance Logic Error:", data.message);
-        showNotification(data.message || "Attendance failed", "error");
+        toast.error(data.message || "Attendance failed");
         setIsScanning(false); // Allow retry
       }
     } catch (err) {
       console.error("❌ Network Error during attendance:", err);
-      showNotification("Network error. Please try again.", "error");
+      toast.error("Network error. Please try again.");
       setIsScanning(false); // Allow retry
     }
   };
@@ -393,27 +385,9 @@ export default function MemberDashboard() {
       )}
 
       <AnimatePresence>
-        {notification && (
-          <motion.div 
-            initial={{ opacity: 0, y: -50, x: '-50%' }}
-            animate={{ opacity: 1, y: 20, x: '-50%' }}
-            exit={{ opacity: 0, y: -50, x: '-50%' }}
-            className={`fixed top-0 left-1/2 z-[200] px-6 py-4 rounded-2xl shadow-2xl border flex items-center gap-3 min-w-[300px] ${
-              notification.type === 'success' ? 'bg-white border-green-100 text-green-600' : 
-              notification.type === 'warning' ? 'bg-yellow-50 border-yellow-200 text-yellow-700' :
-              'bg-white border-red-100 text-red-600'
-            }`}
-          >
-            {notification.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
-            <span className="font-black uppercase tracking-widest text-[10px]">{notification.message}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
         {isBmiModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full shadow-2xl relative">
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full shadow-2xl relative">
               <button onClick={() => {setIsBmiModalOpen(false); setBmiResult(null);}} className="absolute top-6 right-6 p-2 bg-slate-100 rounded-full hover:bg-red-50 transition-all"><X className="w-4 h-4" /></button>
               <h3 className="text-2xl font-black uppercase italic tracking-tighter mb-2">BMI Tool</h3>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-8">Instant biometric analysis</p>
@@ -447,7 +421,7 @@ export default function MemberDashboard() {
       <AnimatePresence>
         {isScanModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="bg-white rounded-[3rem] p-10 max-w-sm w-full shadow-2xl relative overflow-hidden text-center">
+            <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="bg-white rounded-[3rem] p-10 max-sm w-full shadow-2xl relative overflow-hidden text-center">
               <button onClick={() => setIsScanModalOpen(false)} className="absolute top-8 right-8 p-2 bg-slate-100 rounded-full hover:bg-red-50 transition-all text-slate-400"><X className="w-5 h-5" /></button>
               
               <div className="text-center mb-10">

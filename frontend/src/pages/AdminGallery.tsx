@@ -5,6 +5,7 @@ import {
   Edit2, Search, Camera 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { confirmAction } from '../lib/toastUtils';
 
 export default function AdminGallery() {
   const [images, setImages] = useState<any[]>([]);
@@ -126,7 +127,7 @@ export default function AdminGallery() {
                   <button onClick={() => openEditModal(img)} className="p-2.5 bg-white text-slate-900 rounded-xl hover:bg-orange-500 hover:text-white transition-all">
                     <Edit2 className="w-4 h-4" />
                   </button>
-                  <button onClick={async () => { if(confirm("Delete permanently?")) { await fetch(`/api/admin/gallery/${img.id}`, {method: 'DELETE'}); fetchGallery(); } }} 
+                  <button onClick={async () => { if(await confirmAction("Delete permanently?")) { await fetch(`/api/admin/gallery/${img.id}`, {method: 'DELETE'}); fetchGallery(); } }} 
                     className="p-2.5 bg-white text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all">
                     <Trash2 className="w-4 h-4" />
                   </button>

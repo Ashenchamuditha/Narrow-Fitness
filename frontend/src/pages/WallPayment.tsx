@@ -2,18 +2,17 @@ import React, { useState } from 'react';
 import { identifyWallQRUser, startPayment } from '../services/paymentService';
 import { Bot, CreditCard, Mail, User, ShieldCheck, Dumbbell } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { toast } from 'react-hot-toast';
 
 export default function WallPayment() {
   const [email, setEmail] = useState('');
   const [identifiedUser, setIdentifiedUser] = useState<any>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [plans, setPlans] = useState<any[]>([]);
 
   const handleIdentify = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
     try {
       const res = await identifyWallQRUser(email);
       setIdentifiedUser(res.data);
@@ -23,7 +22,7 @@ export default function WallPayment() {
       const plansData = await plansRes.json();
       setPlans(plansData);
     } catch (err: any) {
-      setError('Email not found. Please register first or use the correct email.');
+      toast.error('Email not found. Please register first or use the correct email.');
     } finally {
       setLoading(false);
     }
@@ -66,8 +65,6 @@ export default function WallPayment() {
                 />
               </div>
             </div>
-
-            {error && <p className="text-red-500 text-[10px] font-black uppercase tracking-widest text-center">{error}</p>}
 
             <button
               type="submit"

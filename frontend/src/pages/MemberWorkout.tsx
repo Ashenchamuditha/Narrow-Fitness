@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'react-hot-toast';
+import { confirmAction } from '../lib/toastUtils';
 
 export default function MemberWorkout() {
   const [workouts, setWorkouts] = useState<any[]>([]);
@@ -48,7 +50,7 @@ export default function MemberWorkout() {
     const user = JSON.parse(userStr!);
     const userId = user.id || user.userid;
 
-    if (!window.confirm("Set this as your active workout plan? AI Assistant will use this for coaching.")) return;
+    if (!(await confirmAction("Set this as your active workout plan? AI Assistant will use this for coaching."))) return;
 
     try {
       const res = await fetch(`/api/member/workouts/activate/${id}`, {
@@ -57,10 +59,10 @@ export default function MemberWorkout() {
         body: JSON.stringify({ userId })
       });
       if (res.ok) {
-        alert("🔥 Workout activated! AI Assistant is now synced with this plan.");
+        toast.success("Workout activated! AI Assistant is now synced with this plan.");
         window.location.reload(); 
       }
-    } catch (err) { alert("Failed to activate workout"); }
+    } catch (err) { toast.error("Failed to activate workout"); }
   };
 
   const handleEdit = async (e: React.MouseEvent, plan: any) => {
@@ -83,7 +85,7 @@ export default function MemberWorkout() {
         setPastedText('');
       }
       setIsModalOpen(true);
-    } catch (err) { alert("Error loading workout details for editing."); }
+    } catch (err) { toast.error("Error loading workout details for editing."); }
   };
 
   const handleReadPlan = async (id: number) => {
@@ -93,19 +95,19 @@ export default function MemberWorkout() {
         const data = await res.json();
         setViewingPlan(data);
       }
-    } catch (err) { alert("Error opening workout"); }
+    } catch (err) { toast.error("Error opening workout"); }
   };
 
   const handleDelete = async (e: React.MouseEvent, id: number) => {
     e.stopPropagation(); 
-    if (!window.confirm("Are you sure you want to delete?")) return;
+    if (!(await confirmAction("Are you sure you want to delete?"))) return;
     try {
       const res = await fetch(`/api/member/workouts/${id}`, { method: 'DELETE' });
       if (res.ok) {
-        alert("🗑️ Workout successfully removed from the vault.");
+        toast.success("Workout successfully removed from the vault.");
         window.location.reload(); 
       }
-    } catch (err) { alert("Delete failed"); }
+    } catch (err) { toast.error("Delete failed"); }
   };
 
   const handleSaveWorkout = async (e: React.FormEvent) => {
@@ -160,16 +162,16 @@ export default function MemberWorkout() {
       });
 
       if (res.ok) {
-        alert(editingId ? "🔄 Workout successfully updated!" : "✅ Workout added to your vault!");
+        toast.success(editingId ? "Workout successfully updated!" : "Workout added to your vault!");
         handleCloseModal();
         window.location.reload(); 
       } else {
           const errorData = await res.json();
-          alert(`❌ Error saving workout: ${errorData.message || 'Unknown error'}`);
+          toast.error(`Error saving workout: ${errorData.message || 'Unknown error'}`);
       }
     } catch (err) {
         console.error("❌ Connection error:", err);
-        alert("❌ Connection error.");
+        toast.error("Connection error.");
     } finally { setIsScanning(false); }
   };
 
@@ -184,7 +186,7 @@ export default function MemberWorkout() {
     if (file) {
       // 🛑 BLOCK WORD DOCUMENTS (Doc/Docx) - AI Incompatibility
       if (file.name.toLowerCase().endsWith('.doc') || file.name.toLowerCase().endsWith('.docx')) {
-        alert("⚠️ Word documents (.doc, .docx) are not supported. Please convert your workout to a PDF or copy-paste the text for AI analysis.");
+        toast.error("Word documents (.doc, .docx) are not supported. Please convert your workout to a PDF or copy-paste the text for AI analysis.");
         e.target.value = ''; // Reset input
         return;
       }
@@ -296,7 +298,7 @@ export default function MemberWorkout() {
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="bg-white rounded-[2.5rem] w-full max-w-lg p-10 shadow-2xl border border-slate-100">
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="bg-white rounded-[2.5rem] w-full max-w-lg p-10 shadow-2xl border border-slate-100">
                 <div className="flex justify-between items-center mb-10">
                   <h2 className="text-2xl font-black text-slate-900 italic tracking-tighter">
                     {editingId ? 'Update workout' : 'New workout'}
@@ -336,7 +338,7 @@ export default function MemberWorkout() {
       <AnimatePresence>
         {viewingPlan && (
           <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md">
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="bg-white rounded-[2.5rem] w-full max-w-5xl h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="bg-white rounded-[2.5rem] w-full max-w-5xl h-[90vh] flex flex-col shadow-2xl overflow-hidden">
               <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-white shadow-sm relative z-10">
                 <div className="flex items-center gap-4">
                    <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center text-orange-500 shadow-lg"><FileStack className="w-6 h-6" /></div>

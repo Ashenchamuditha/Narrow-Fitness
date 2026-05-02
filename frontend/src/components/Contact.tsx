@@ -4,11 +4,11 @@ import {
   Mail, Phone, MapPin, Send, Loader2, 
   ShieldCheck, CheckCircle2, X, ArrowLeft 
 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 
 export default function Contact() {
   const [step, setStep] = useState<'form' | 'otp'>('form');
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState<{ type: 'success' | 'error', msg: string } | null>(null);
   
   const [formData, setFormData] = useState({
     full_name: '',
@@ -22,7 +22,6 @@ export default function Contact() {
   const handleSendOTP = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setStatus(null);
 
     try {
       const res = await fetch('/api/public/contact/send-otp', {
@@ -34,11 +33,12 @@ export default function Contact() {
       const data = await res.json();
       if (res.ok) {
         setStep('otp');
+        toast.success("Verification code sent to your email.");
       } else {
-        setStatus({ type: 'error', msg: data.message });
+        toast.error(data.message || "Failed to send code.");
       }
     } catch (err) {
-      setStatus({ type: 'error', msg: "Failed to connect to server. Check your connection." });
+      toast.error("Failed to connect to server. Check your connection.");
     } finally {
       setLoading(false);
     }
@@ -58,7 +58,7 @@ export default function Contact() {
       
       const data = await res.json();
       if (res.ok) {
-        setStatus({ type: 'success', msg: "✅ Message Verified & Sent! Refreshing page..." });
+        toast.success("Message Verified & Sent! Refreshing page...");
         
         // Wait 2 seconds so the user can see the success message, then refresh
         setTimeout(() => {
@@ -66,11 +66,11 @@ export default function Contact() {
         }, 2000);
 
       } else {
-        setStatus({ type: 'error', msg: data.message });
+        toast.error(data.message || "Verification failed.");
         setLoading(false); // Only stop loading if it failed
       }
     } catch (err) {
-      setStatus({ type: 'error', msg: "Verification failed. Try again." });
+      toast.error("Verification failed. Try again.");
       setLoading(false);
     }
   };
@@ -138,23 +138,6 @@ Kadawatha. Sri Lanka</div>
             viewport={{ once: true }}
             className="bg-gray-50 p-8 md:p-12 rounded-[2.5rem] border border-gray-100 shadow-2xl relative overflow-hidden"
           >
-            <AnimatePresence>
-              {status && (
-                <motion.div 
-                  initial={{ opacity: 0, y: -20 }} 
-                  animate={{ opacity: 1, y: 0 }} 
-                  exit={{ opacity: 0 }}
-                  className={`mb-8 p-4 rounded-2xl flex items-center gap-3 font-black text-[10px] uppercase tracking-widest shadow-lg ${
-                    status.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
-                  }`}
-                >
-                  {status.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <X className="w-4 h-4" />}
-                  {status.msg}
-                  <button onClick={() => setStatus(null)} className="ml-auto opacity-50 hover:opacity-100"><X className="w-4 h-4" /></button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
             {step === 'form' ? (
               <form onSubmit={handleSendOTP} className="space-y-6">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">

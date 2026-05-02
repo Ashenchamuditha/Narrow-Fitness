@@ -1,5 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import React, { useEffect } from 'react';
+import { Toaster, toast } from 'react-hot-toast';
+import { Scissors, X } from 'lucide-react';
 
 // --- COMPONENT IMPORTS ---
 import Navbar from './components/Navbar';
@@ -124,6 +126,69 @@ function ScrollAndRouteReset() {
 export default function App() {
   return (
     <Router>
+      <Toaster 
+        position="top-center"
+        reverseOrder={false}
+        gutter={8}
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: '#333',
+            color: '#fff',
+            borderRadius: '10px',
+            fontSize: '14px',
+          },
+          success: {
+            duration: 3000,
+            iconTheme: {
+              primary: '#f97316',
+              secondary: '#fff',
+            },
+          },
+          error: {
+            duration: 5000,
+          },
+        }}
+      >
+        {(t) => (
+          <div
+            style={{
+              ...t.style,
+              animation: t.visible ? 'fade-in 0.2s ease-out' : 'fade-out 0.2s ease-in',
+              background: '#1a1a1a',
+              color: '#fff',
+              padding: '12px 16px',
+              borderRadius: '16px',
+              boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              border: '1px solid rgba(255,255,255,0.1)',
+              maxWidth: '90vw',
+            }}
+          >
+            {t.type === 'loading' ? (
+              <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+            ) : t.type === 'success' ? (
+              <div className="text-orange-500">✅</div>
+            ) : t.type === 'error' ? (
+              <div className="text-red-500">❌</div>
+            ) : null}
+            
+            <div className="flex-1 font-bold text-xs uppercase tracking-widest leading-relaxed">
+              {typeof t.message === 'function' ? t.message(t) : t.message}
+            </div>
+
+            <button
+              onClick={() => toast.dismiss(t.id)}
+              className="p-2 hover:bg-white/10 rounded-lg transition-all text-orange-500 group"
+              title="Dismiss"
+            >
+              <Scissors className="w-4 h-4 group-hover:rotate-12 transition-transform" />
+            </button>
+          </div>
+        )}
+      </Toaster>
       {/* 
           This component now manages all scroll resets. 
           The previous "ScrollToTop" component is no longer needed 

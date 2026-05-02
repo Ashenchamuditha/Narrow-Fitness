@@ -6,6 +6,8 @@ import {
   TrendingUp, Dumbbell, Loader2, Hourglass, ShieldCheck, Zap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'react-hot-toast';
+import { confirmAction } from '../lib/toastUtils';
 
 export default function MemberClasses() {
   const [classes, setClasses] = useState<any[]>([]);
@@ -43,11 +45,11 @@ export default function MemberClasses() {
     if (!user) return;
     if (cls.is_cancelled) return;
     if (cls.capacity <= 0) {
-        alert("This class is currently full.");
+        toast.error("This class is currently full.");
         return;
     }
 
-    const confirmJoin = window.confirm(`Request to join "${cls.name}"?`);
+    const confirmJoin = await confirmAction(`Request to join "${cls.name}"?`);
     if (!confirmJoin) return;
 
     try {
@@ -58,14 +60,14 @@ export default function MemberClasses() {
       });
 
       if (res.ok) {
-        alert("✅ Request Sent! Your status will update once the coach approves.");
+        toast.success("Request Sent! Your status will update once the coach approves.");
         fetchClasses(user.id); 
       } else {
         const err = await res.json();
-        alert(err.message || "Failed to join.");
+        toast.error(err.message || "Failed to join.");
       }
     } catch (err) {
-      alert("Network Error.");
+      toast.error("Network Error.");
     }
   };
 

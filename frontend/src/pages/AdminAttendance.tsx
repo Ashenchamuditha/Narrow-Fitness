@@ -26,6 +26,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import AdminLayout from '../components/AdminLayout';
 import { QRCodeSVG } from 'qrcode.react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
+import { toast } from 'react-hot-toast';
+import { confirmAction, promptAction } from '../lib/toastUtils';
 
 export default function AdminAttendance() {
   const [attendance, setAttendance] = useState<any[]>([]);
@@ -94,7 +96,7 @@ export default function AdminAttendance() {
   };
 
   const handleAddConfig = async () => {
-    const name = prompt("Enter Location Name (e.g. Main Entrance, VIP Gate):");
+    const name = await promptAction("Enter Location Name (e.g. Main Entrance, VIP Gate):");
     if (!name) return;
     
     const newKey = `NF-ATTEND-${Math.random().toString(36).substring(2, 7).toUpperCase()}-${new Date().getFullYear()}`;
@@ -106,7 +108,7 @@ export default function AdminAttendance() {
       });
       if (res.ok) {
         await fetchQrConfigs();
-        alert('New QR Configuration added and activated!');
+        toast.success('New QR Configuration added and activated!');
       }
     } catch (err) {
       console.error('Error adding config:', err);
@@ -114,7 +116,7 @@ export default function AdminAttendance() {
   };
 
   const handleEditConfig = async (id: number, currentName: string) => {
-    const newName = prompt("Update Location Name:", currentName);
+    const newName = await promptAction("Update Location Name:", currentName);
     if (!newName || newName === currentName) return;
 
     try {
@@ -132,7 +134,7 @@ export default function AdminAttendance() {
   };
 
   const handleDeleteConfig = async (id: number, name: string) => {
-    if (!confirm(`Are you sure you want to delete the QR config for "${name}"?`)) return;
+    if (!(await confirmAction(`Are you sure you want to delete the QR config for "${name}"?`))) return;
 
     try {
       const res = await fetch(`/api/attendance/configs/${id}`, {
@@ -140,7 +142,7 @@ export default function AdminAttendance() {
       });
       if (res.ok) {
         await fetchQrConfigs();
-        alert('Config deleted successfully.');
+        toast.success('Config deleted successfully.');
       }
     } catch (err) {
       console.error('Error deleting config:', err);
@@ -161,7 +163,7 @@ export default function AdminAttendance() {
       
       if (res.ok) {
         await fetchQrConfigs();
-        alert('New QR Key generated and activated!');
+        toast.success('New QR Key generated and activated!');
       }
     } catch (err) {
       console.error('Error rotating key:', err);
@@ -220,14 +222,14 @@ export default function AdminAttendance() {
               setIsScannerOpen(false);
             } else {
               console.warn("Admin: Unknown QR Scanned:", decodedText);
-              alert("Unknown QR Code: " + decodedText);
+              toast.error("Unknown QR Code: " + decodedText);
             }
           },
           () => {}
         );
       } catch (err) {
         console.error("Admin: Scanner launch error", err);
-        alert("Camera error: " + err);
+        toast.error("Camera error: " + err);
       }
     }, 500);
   };

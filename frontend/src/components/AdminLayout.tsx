@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'react-hot-toast';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -79,14 +80,14 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       });
 
       if (res.ok) {
-        alert("✅ Broadcast sent successfully to all members.");
+        toast.success("Broadcast sent successfully to all members.");
         setBroadcastData({ subject: '', message: '' });
         setIsBroadcastModalOpen(false);
       } else {
-        alert("❌ Failed to send broadcast.");
+        toast.error("Failed to send broadcast.");
       }
     } catch (err) {
-      alert("❌ Connection error.");
+      toast.error("Connection error.");
     } finally {
       setIsSending(false);
     }

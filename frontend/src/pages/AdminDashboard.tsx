@@ -24,6 +24,7 @@ import {
   Clock
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
 import AdminLayout from '../components/AdminLayout';
 
 export default function AdminDashboard() {
@@ -111,11 +112,11 @@ export default function AdminDashboard() {
           window.location.reload();
         }, 2500);
       } else {
-        alert("Failed to send emails. Gmail limit reached or credentials invalid.");
+        toast.error("Failed to send emails. Gmail limit reached or credentials invalid.");
         setIsSending(false);
       }
     } catch (err) {
-      alert("Server connection error.");
+      toast.error("Server connection error.");
       setIsSending(false);
     }
   };

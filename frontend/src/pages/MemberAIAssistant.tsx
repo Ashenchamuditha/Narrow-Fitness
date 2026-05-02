@@ -8,6 +8,8 @@ import {
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'react-hot-toast';
+import { confirmAction } from '../lib/toastUtils';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -161,7 +163,7 @@ export default function MemberAIAssistant() {
 
   const deleteSession = async (e: React.MouseEvent, sid: number) => {
     e.stopPropagation();
-    if (!window.confirm("are you sure you want to delete?")) return;
+    if (!(await confirmAction("are you sure you want to delete?"))) return;
     const res = await fetch(`/api/member/ai/sessions/${sid}`, { method: 'DELETE' });
     if (res.ok) {
         const filtered = sessions.filter(s => s.id !== sid);
@@ -226,7 +228,7 @@ export default function MemberAIAssistant() {
     const file = e.target.files[0]; if (!file) return;
 
     if (file.name.toLowerCase().endsWith('.doc') || file.name.toLowerCase().endsWith('.docx')) {
-      alert("⚠️ Word documents (.doc, .docx) are not supported. Please convert your workout to a PDF or copy-paste the text.");
+      toast.error("⚠️ Word documents (.doc, .docx) are not supported. Please convert your workout to a PDF or copy-paste the text.");
       e.target.value = '';
       return;
     }
@@ -283,7 +285,7 @@ export default function MemberAIAssistant() {
       mediaRecorder.start();
       setIsListening(true);
     } catch (err) {
-      alert("Please allow microphone access for voice input.");
+      toast.error("Please allow microphone access for voice input.");
       console.error(err);
     }
   };

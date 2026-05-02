@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react'; // Added AnimatePresence for smoother list transitions
 import { Plus, Trash2, UserPlus, Image as ImageIcon, Briefcase, FileText, Edit2, X, Search } from 'lucide-react';
+import { toast } from 'react-hot-toast';
+import { confirmAction } from '../lib/toastUtils';
 import AdminLayout from '../components/AdminLayout';
 
 interface Trainer {
@@ -123,10 +125,10 @@ export default function AdminTrainers() {
         setIsAdding(false);
         setEditingId(null);
         fetchTrainers();
-        alert('✅ Trainer saved successfully!');
+        toast.success('Trainer saved successfully!');
       }
     } catch (err) {
-      alert(`Error: ${err}`);
+      toast.error(`Error: ${err}`);
     }
   };
 
@@ -151,7 +153,7 @@ export default function AdminTrainers() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this trainer?')) return;
+    if (!(await confirmAction('Are you sure you want to delete this trainer?'))) return;
     try {
       const res = await fetch(`/api/admin/trainers/${id}`, { method: 'DELETE' });
       if (res.ok) {

@@ -6,6 +6,8 @@ import {
   History, PlayCircle, Loader2, Timer, Users, UserMinus, Check, Bell, RefreshCw, UserCheck, Zap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'react-hot-toast';
+import { confirmAction } from '../lib/toastUtils';
 
 interface ClassData {
   id: number;
@@ -82,11 +84,11 @@ export default function AdminClasses() {
   }).length;
 
   const handleDeleteClass = async (id: number) => {
-    if (!window.confirm("⚠️ DANGER: Delete this session permanently?")) return;
+    if (!(await confirmAction("⚠️ DANGER: Delete this session permanently?"))) return;
     try {
       const res = await fetch(`/api/admin/classes/${id}`, { method: 'DELETE' });
       if (res.ok) fetchData();
-    } catch (err) { alert("Server error."); }
+    } catch (err) { toast.error("Server error."); }
   };
 
   const handleOpenBookings = async (cls: ClassData) => {
@@ -100,7 +102,7 @@ export default function AdminClasses() {
   };
 
   const confirmBooking = async (bookingId: number) => {
-    if (!window.confirm("Approve member?")) return;
+    if (!(await confirmAction("Approve member?"))) return;
     const res = await fetch(`/api/admin/classes/bookings/${bookingId}/confirm`, { method: 'PUT' });
     if (res.ok) { 
       const updatedBookings = await fetch(`/api/admin/classes/${selectedClass?.id}/bookings`).then(r => r.json());
@@ -110,7 +112,7 @@ export default function AdminClasses() {
   };
 
   const removeBooking = async (bookingId: number) => {
-    if (!window.confirm("Remove member?")) return;
+    if (!(await confirmAction("Remove member?"))) return;
     const res = await fetch(`/api/admin/classes/bookings/${bookingId}`, { method: 'DELETE' });
     if (res.ok) { 
        const updatedBookings = await fetch(`/api/admin/classes/${selectedClass?.id}/bookings`).then(r => r.json());
@@ -121,7 +123,7 @@ export default function AdminClasses() {
 
   const handleCancelToggle = async (cls: ClassData) => {
     const action = cls.is_cancelled ? "restore" : "cancel";
-    if (!window.confirm(`Are you sure you want to ${action} this class?`)) return;
+    if (!(await confirmAction(`Are you sure you want to ${action} this class?`))) return;
 
     await fetch(`/api/admin/classes/${cls.id}`, {
       method: 'PUT',
@@ -133,7 +135,7 @@ export default function AdminClasses() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.trainer_id) { alert("Select a coach."); return; }
+    if (!formData.trainer_id) { toast.error("Select a coach."); return; }
 
     const url = editingClass ? `/api/admin/classes/${editingClass.id}` : '/api/admin/classes';
     const method = editingClass ? 'PUT' : 'POST';
@@ -260,7 +262,7 @@ export default function AdminClasses() {
       <AnimatePresence>
         {isBookingModalOpen && selectedClass && (
           <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="bg-white rounded-[2.5rem] w-full max-w-2xl shadow-2xl overflow-hidden">
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="bg-white rounded-[2.5rem] w-full max-w-2xl shadow-2xl overflow-hidden">
                <div className="p-8 border-b flex justify-between items-center bg-slate-50">
                   <div><h2 className="text-2xl font-black text-slate-900 uppercase italic">Members: {selectedClass.name}</h2><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{selectedClass.capacity} Slots Left</p></div>
                   <button onClick={() => setIsBookingModalOpen(false)} className="p-2 bg-white rounded-full shadow-sm hover:bg-red-50 transition-colors"><X /></button>

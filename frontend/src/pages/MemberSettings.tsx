@@ -8,6 +8,8 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'react-hot-toast';
+import { confirmAction } from '../lib/toastUtils';
 
 export default function MemberSettings() {
   const [user, setUser] = useState<any>(null);
@@ -123,11 +125,11 @@ export default function MemberSettings() {
     if (purpose === 'account') {
         if (accountFormData.newPassword) {
             if (!validateStrongPassword(accountFormData.newPassword)) {
-                alert("❌ New password must be 6-15 characters, contain 1 Uppercase letter, and 1 Special Character (@$!%*?&).");
+                toast.error("New password must be 6-15 characters, contain 1 Uppercase letter, and 1 Special Character (@$!%*?&).");
                 return;
             }
             if (accountFormData.newPassword !== accountFormData.confirmPassword) {
-                alert("❌ New passwords do not match!");
+                toast.error("New passwords do not match!");
                 return;
             }
         }
@@ -139,7 +141,7 @@ export default function MemberSettings() {
   // FINAL SECURE UPDATE EXECUTION
   const executeSecureUpdate = async () => {
     if (!accountFormData.currentPassword) {
-      alert("Verification Error: Current password is required.");
+      toast.error("Verification Error: Current password is required.");
       return;
     }
 
@@ -183,14 +185,14 @@ export default function MemberSettings() {
             localStorage.setItem('narrow_fitness_user', JSON.stringify(updatedUser));
         }
         
-        alert("✅ Success! Profiles synchronized with elite records.");
+        toast.success("Success! Profiles synchronized with elite records.");
         window.location.reload(); // PAGE REFRESH ON SUCCESS ONLY
       } else {
-        alert("❌ Denied: " + (result.message || "Invalid credentials."));
+        toast.error("Denied: " + (result.message || "Invalid credentials."));
         setIsSaving(false);
       }
     } catch (err) {
-        alert("❌ Error: Could not connect to the server.");
+        toast.error("Error: Could not connect to the server.");
         setIsSaving(false);
     }
   };

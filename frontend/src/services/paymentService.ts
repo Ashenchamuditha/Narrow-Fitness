@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { toast } from 'react-hot-toast';
 
 const API_URL = '/api';
 
@@ -82,7 +83,7 @@ export const startPayment = async (userId: number, pkg: any, user: any) => {
 
   } catch (error) {
     console.error("Payment Error:", error);
-    alert("Could not initiate payment. Please try again.");
+    toast.error("Could not initiate payment. Please try again.");
   }
 };
 

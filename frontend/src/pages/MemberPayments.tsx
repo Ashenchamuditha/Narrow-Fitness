@@ -6,6 +6,8 @@ import {
   Trash2, ArrowUpCircle, Info, XCircle, CreditCard, History, Download, Clock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'react-hot-toast';
+import { confirmAction } from '../lib/toastUtils';
 import { startPayment } from '../services/paymentService';
 
 interface PricingPlan {
@@ -118,7 +120,7 @@ export default function MemberPayments() {
   const handleOnlinePayment = () => {
     const planToPay = selectedPlan;
     if (!planToPay || !user) {
-      alert("Please select a plan first.");
+      toast.error("Please select a plan first.");
       return;
     }
     startPayment(user.id, planToPay, user);
@@ -126,7 +128,7 @@ export default function MemberPayments() {
 
   const handleActivation = async () => {
     if (!activationCode) {
-      alert("Please enter the activation code.");
+      toast.error("Please enter the activation code.");
       return;
     }
     setIsActivating(true);
@@ -142,13 +144,13 @@ export default function MemberPayments() {
       });
       const data = await res.json();
       if (res.ok) {
-        alert(`🎉 Success! Your membership is now active.`);
+        toast.success("Success! Your membership is now active.");
         window.location.reload();
       } else {
-        alert(data.message || "Invalid activation code.");
+        toast.error(data.message || "Invalid activation code.");
       }
     } catch (err) {
-      alert("Connection failed.");
+      toast.error("Connection failed.");
     } finally {
       setIsActivating(false);
     }
@@ -162,7 +164,7 @@ export default function MemberPayments() {
       <AnimatePresence>
         {showSuccessPopup && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-[3rem] p-10 max-w-sm w-full text-center shadow-2xl border-4 border-orange-500/20">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-[3rem] p-10 max-sm w-full text-center shadow-2xl border-4 border-orange-500/20">
               <div className="w-20 h-20 bg-green-100 rounded-[2rem] flex items-center justify-center mx-auto mb-6">
                 <CheckCircle2 className="w-10 h-10 text-green-600" />
               </div>

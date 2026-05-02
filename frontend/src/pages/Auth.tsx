@@ -6,6 +6,8 @@ import {
   ShieldCheck, RefreshCcw, X, KeyRound, Info
 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
+import { confirmAction } from '../lib/toastUtils';
 
 export default function Auth() {
   const [authMode, setAuthMode] = useState<'login' | 'signup' | 'forgot'>('login');
@@ -41,8 +43,8 @@ useEffect(() => {
   // Push a dummy state into the history so there is something to go "back" from
   window.history.pushState(null, "", window.location.href);
 
-  const handleBackButton = (event: PopStateEvent) => {
-    const confirmExit = window.confirm("Do you want to stay on the dashboard? (Cancel to stay, OK to leave)");
+  const handleBackButton = async (event: PopStateEvent) => {
+    const confirmExit = await confirmAction("Do you want to stay on the dashboard? (Cancel to stay, OK to leave)");
     
     if (confirmExit) {
       // If they click OK, we allow them to go back
@@ -179,7 +181,7 @@ useEffect(() => {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Reset failed');
       
-      alert("✅ Password updated successfully!");
+      toast.success("Password updated successfully!");
       handleAuthSuccess(data); 
     } catch (err: any) { 
       setError(err.message); 
@@ -282,7 +284,7 @@ useEffect(() => {
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">User Password</label>
                 <div className="relative group">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-orange-500" />
-                  <input type={showPassword ? "text" : "password"} name="password" required value={formData.password} onChange={handleChange} className="w-full bg-gray-50 border border-gray-100 rounded-xl pl-12 pr-12 py-3 font-bold text-sm focus:ring-2 focus:ring-orange-500 outline-none" placeholder="e.g. pass@123" />
+                  <input type={showPassword ? "text" : "password"} name="password" required value={formData.password} onChange={handleChange} className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl pl-12 pr-12 py-3 font-bold text-sm focus:ring-2 focus:ring-orange-500 outline-none" placeholder="e.g. pass@123" />
                   <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-orange-500 transition-colors">{showPassword ? <EyeOff size={20}/> : <Eye size={20}/>}</button>
                 </div>
                 {authMode === 'signup' && <p className="mt-2 text-[9px] font-black uppercase text-slate-400 flex items-center gap-1"><Info size={10} className="text-orange-500" /> 6-15 chars, 1 uppercase, 1 symbol</p>}
@@ -294,7 +296,7 @@ useEffect(() => {
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Confirm Password</label>
                 <div className="relative group">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-orange-500" />
-                  <input type={showConfirmPassword ? "text" : "password"} name="confirmPassword" required value={formData.confirmPassword} onChange={handleChange} className="w-full bg-gray-50 border border-gray-100 rounded-xl pl-12 pr-12 py-3 font-bold text-sm focus:ring-2 focus:ring-orange-500 outline-none" placeholder="repeat password" />
+                  <input type={showConfirmPassword ? "text" : "password"} name="confirmPassword" required value={formData.confirmPassword} onChange={handleChange} className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl pl-12 pr-12 py-3 font-bold text-sm focus:ring-2 focus:ring-orange-500 outline-none" placeholder="repeat password" />
                   <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-orange-500 transition-colors">{showConfirmPassword ? <EyeOff size={20}/> : <Eye size={20}/>}</button>
                 </div>
               </div>

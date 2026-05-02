@@ -5,6 +5,8 @@ import {
   Key, Ticket, Copy, CheckCircle2, Loader2, Info, ChevronRight, AlertTriangle, Zap,
   Search // Added Search icon
 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
+import { confirmAction } from '../lib/toastUtils';
 import AdminLayout from '../components/AdminLayout';
 
 interface PricingPlan {
@@ -73,11 +75,11 @@ export default function AdminPricing() {
 
   const handleGenerateKey = async (planId: number) => {
     if (!planId) {
-      alert("Invalid Plan ID");
+      toast.error("Invalid Plan ID");
       return;
     }
 
-    if (!window.confirm("Generate a new one-time activation key for this package?")) return;
+    if (!(await confirmAction("Generate a new one-time activation key for this package?"))) return;
     
     setIsGenerating(planId);
 
@@ -91,20 +93,20 @@ export default function AdminPricing() {
       const contentType = res.headers.get("content-type");
       if (!contentType || !contentType.includes("application/json")) {
         console.error("Backend sent HTML instead of JSON. Check your API routes.");
-        alert("Server Error: The backend route was not found (404). Check your server console.");
+        toast.error("Server Error: The backend route was not found (404). Check your server console.");
         return;
       }
 
       const data = await res.json();
 
       if (res.ok) {
-        alert(`✅ KEY GENERATED: ${data.code}\nCopy it from the sidebar to give to the member.`);
+        toast.success(`KEY GENERATED: ${data.code}`);
         fetchUnusedCodes();
       } else {
-        alert(`❌ Failed: ${data.message}`);
+        toast.error(`❌ Failed: ${data.message}`);
       }
     } catch (err) {
-      alert("Network Error: Make sure your backend server (Port 5000) is running.");
+      toast.error("Network Error: Make sure your backend server (Port 5000) is running.");
     } finally {
       setIsGenerating(null);
     }
@@ -143,7 +145,7 @@ export default function AdminPricing() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const actionType = isEditing ? "update this existing" : "create this new";
-    const hasConfirmed = window.confirm(`Are you sure you want to ${actionType} pricing package?`);
+    const hasConfirmed = await confirmAction(`Are you sure you want to ${actionType} pricing package?`);
     if (!hasConfirmed) return;
 
     const method = isEditing ? 'PUT' : 'POST';
@@ -161,17 +163,17 @@ export default function AdminPricing() {
       });
 
       if (res.ok) {
-        alert("✅ Operation successful!");
+        toast.success("Operation successful!");
         resetForm();
         fetchPlans();
       }
     } catch (err) {
-      alert("An error occurred. Please try again.");
+      toast.error("An error occurred. Please try again.");
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to permanently delete this pricing plan?')) return;
+    if (!(await confirmAction('Are you sure you want to permanently delete this pricing plan?'))) return;
     try {
       const res = await fetch(`/api/admin/pricing/${id}`, { method: 'DELETE' });
       if (res.ok) fetchPlans();
@@ -311,7 +313,7 @@ export default function AdminPricing() {
                          <div className="text-[9px] font-black text-orange-600 uppercase mt-1.5 bg-orange-50 px-2 py-0.5 rounded w-fit">{code.plan_name}</div>
                       </div>
                       <button 
-                        onClick={() => { navigator.clipboard.writeText(code.code); alert("Key Copied to Clipboard!"); }}
+                        onClick={() => { navigator.clipboard.writeText(code.code); toast.success("Key Copied to Clipboard!"); }}
                         className="p-3 bg-white text-slate-400 hover:text-orange-600 rounded-xl shadow-sm transition-all relative z-10"
                       >
                          <Copy className="w-4.5 h-4.5" />

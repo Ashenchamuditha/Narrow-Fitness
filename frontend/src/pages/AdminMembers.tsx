@@ -5,6 +5,7 @@ import {
   Edit2, Trash2, X, CheckCircle2, UserPlus // Added UserPlus icon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'react-hot-toast';
 
 export default function AdminMembers() {
   const [members, setMembers] = useState<any[]>([]);
@@ -89,13 +90,13 @@ export default function AdminMembers() {
         setMembers([...members, newMember]);
         setShowAddModal(false);
         setAddFormData({ name: '', email: '', password: '', role: 'user' });
-        setSuccessMessage(`New member "${newMember.name}" created successfully.`);
+        toast.success(`New member "${newMember.name}" created successfully.`);
       } else {
         const errorData = await res.json().catch(() => ({ message: 'Creation failed' }));
-        alert(`Error: ${errorData.message}`);
+        toast.error(`Error: ${errorData.message}`);
       }
     } catch (err) {
-      alert('Network error while adding member');
+      toast.error('Network error while adding member');
     } finally {
       setIsSaving(false);
     }
@@ -124,13 +125,13 @@ export default function AdminMembers() {
         setMembers(members.map(m => m.id === updatedUser.id ? updatedUser : m));
         setShowEditModal(false);
         setSelectedMember(null);
-        setSuccessMessage(`Member "${updatedUser.name}" updated successfully.`);
+        toast.success(`Member "${updatedUser.name}" updated successfully.`);
       } else {
         const errorData = await res.json().catch(() => ({ message: 'Update failed' }));
-        alert(`Error: ${errorData.message}`);
+        toast.error(`Error: ${errorData.message}`);
       }
     } catch (err) {
-      alert('Network error while updating member');
+      toast.error('Network error while updating member');
     } finally {
       setIsSaving(false);
     }
@@ -157,12 +158,12 @@ export default function AdminMembers() {
         setMembers(members.filter(m => m.id !== selectedMember.id));
         setShowDeleteConfirm(false);
         setSelectedMember(null);
-        setSuccessMessage(`Member "${deletedName}" has been permanently removed.`);
+        toast.success(`Member "${deletedName}" has been permanently removed.`);
       } else {
-        alert('Failed to delete member from database');
+        toast.error('Failed to delete member from database');
       }
     } catch (err) {
-      alert('Network error while deleting member');
+      toast.error('Network error while deleting member');
     } finally {
       setIsDeleting(false);
     }

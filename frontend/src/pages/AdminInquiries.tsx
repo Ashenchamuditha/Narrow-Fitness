@@ -6,6 +6,7 @@ import {
   MoreVertical, AlertCircle, Loader2, Send, RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { confirmAction } from '../lib/toastUtils';
 
 export default function AdminInquiries() {
   const [inquiries, setInquiries] = useState<any[]>([]);

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import AdminLayout from '../components/AdminLayout';
 import { CreditCard, Search, Filter, Download, Plus, QrCode, CheckCircle, XCircle } from 'lucide-react';
 import axios from 'axios';
+import { toast } from 'react-hot-toast';
 import { recordCashPayment } from '../services/paymentService';
 import QRCode from 'qrcode';
 
@@ -38,11 +39,11 @@ export default function AdminPayments() {
     e.preventDefault();
     try {
       await recordCashPayment(parseInt(selectedUserId), parseInt(selectedPlanId), parseFloat(amountPaid));
-      alert("Cash payment recorded successfully!");
+      toast.success("Cash payment recorded successfully!");
       setShowManualModal(false);
       fetchData();
     } catch (err) {
-      alert("Error recording payment");
+      toast.error("Error recording payment");
     }
   };
 
