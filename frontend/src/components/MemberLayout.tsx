@@ -13,10 +13,23 @@ import {
   Bot,
   Settings,
   ShieldCheck,
-  Star
+  Star,
+  Check,
+  Info,
+  AlertCircle
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { io } from 'socket.io-client';
+
+interface Notification {
+  id: number;
+  title: string;
+  message: string;
+  type: string;
+  is_read: boolean;
+  created_at: string;
+}
 
 interface MemberLayoutProps {
   children: React.ReactNode;
@@ -26,21 +39,57 @@ interface MemberLayoutProps {
 export default function MemberLayout({ children, fullWidth = false }: MemberLayoutProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [membership, setMembership] = useState<any>(null);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+
   const location = useLocation();
   const navigate = useNavigate();
   const profileRef = useRef<HTMLDivElement>(null);
+  const notificationsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const userStr = localStorage.getItem('narrow_fitness_user');
+    const token = localStorage.getItem('narrow_fitness_token');
+    
     if (!userStr) {
       navigate('/auth', { replace: true });
       return;
     }
 
     const parsedUser = JSON.parse(userStr);
+    setUser(parsedUser);
+
+    // Initial Notifications Fetch
+    const fetchNotifications = async () => {
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/member/notifications/${parsedUser.id}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        setNotifications(data);
+        setUnreadCount(data.filter((n: Notification) => !n.is_read).length);
+      } catch (err) { console.error("Error fetching notifications:", err); }
+    };
+    fetchNotifications();
+
+    // Socket.io integration
+    const socket = io(import.meta.env.VITE_API_URL || 'http://localhost:5000');
+    socket.on(`notification_${parsedUser.id}`, (notification: Notification) => {
+      setNotifications(prev => [notification, ...prev]);
+      setUnreadCount(prev => prev + 1);
+    });
+    socket.on('new_global_notification', (notification: Notification) => {
+      setNotifications(prev => {
+        if (prev.find(n => n.id === notification.id)) return prev;
+        return [notification, ...prev];
+      });
+      setUnreadCount(prev => prev + 1);
+    });
+
     const role = parsedUser.role?.toLowerCase();
     const isComplete = parsedUser.is_profile_complete === true;
     const isOnOnboardingPage = location.pathname === '/member/onboarding';
@@ -64,20 +113,12 @@ export default function MemberLayout({ children, fullWidth = false }: MemberLayo
       }
     }
 
-    setUser(parsedUser);
-
     // Fetch Membership Status
     const fetchMembership = async () => {
       try {
         const res = await fetch(`/api/member/membership/${parsedUser.id}`);
         const data = await res.json();
         setMembership(data);
-        
-        // Block Dashboard access if blocked
-        if (data?.status === 'blocked' && location.pathname !== '/member/payments') {
-           // Redirect to payments but don't allow anything else
-           // For now, let's just let them see the blocked message
-        }
       } catch (e) { console.error("Membership fetch error", e); }
     };
     fetchMembership();
@@ -86,10 +127,40 @@ export default function MemberLayout({ children, fullWidth = false }: MemberLayo
       if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
         setIsProfileOpen(false);
       }
+      if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
+        setIsNotificationsOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      socket.disconnect();
+    };
   }, [navigate, location.pathname]);
+
+  const markAsRead = async (id: number) => {
+    try {
+      const token = localStorage.getItem('narrow_fitness_token');
+      await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/member/notifications/mark-read/${id}`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (err) { console.error("Error marking read:", err); }
+  };
+
+  const markAllAsRead = async () => {
+    try {
+      const token = localStorage.getItem('narrow_fitness_token');
+      await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/member/notifications/mark-all-read/${user.id}`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      setUnreadCount(0);
+    } catch (err) { console.error("Error marking all read:", err); }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('narrow_fitness_token');
@@ -97,15 +168,12 @@ export default function MemberLayout({ children, fullWidth = false }: MemberLayo
     window.location.href = '/'; 
   };
 
-  // --- IMPROVED REFRESH LOGIC ---
   const handleHomeClick = (e: React.MouseEvent) => {
     e.preventDefault();
     if (location.pathname === '/member') {
-      // If already on home, force a full browser refresh and scroll to top
-      window.scrollTo({ top: 0, behavior: 'smooth' }); // Visual feedback
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       window.location.reload(); 
     } else {
-      // If on another page, navigate to home
       window.location.href = '/member';
     }
   };
@@ -117,6 +185,15 @@ export default function MemberLayout({ children, fullWidth = false }: MemberLayo
     { id: 'ai-assistant', name: 'AI Assistant', icon: Bot, path: '/member/ai-assistant' },
     { id: 'payments', name: 'Memberships', icon: CreditCard, path: '/member/payments' },
   ];
+
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'success': return <Check className="w-4 h-4 text-green-500" />;
+      case 'warning': return <AlertCircle className="w-4 h-4 text-yellow-500" />;
+      case 'error': return <X className="w-4 h-4 text-red-500" />;
+      default: return <Info className="w-4 h-4 text-orange-500" />;
+    }
+  };
 
   if (!user && location.pathname !== '/member/onboarding') return null;
 
@@ -202,10 +279,93 @@ export default function MemberLayout({ children, fullWidth = false }: MemberLayo
 
             {/* TOP BAR ACTIONS */}
             <div className="flex items-center gap-4">
-              <button className="relative text-gray-400 hover:text-white p-2 bg-white/5 rounded-xl border border-white/10 transition-colors cursor-pointer">
-                <Bell className="w-5 h-5" />
-                <span className="absolute top-2 right-2 w-2 h-2 bg-orange-500 rounded-full border-2 border-black animate-pulse"></span>
-              </button>
+              {/* Notification Center */}
+              <div className="relative" ref={notificationsRef}>
+                <button 
+                  onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+                  className="relative text-gray-400 hover:text-white p-2 bg-white/5 rounded-xl border border-white/10 transition-colors cursor-pointer group"
+                >
+                  <Bell className="w-5 h-5 group-hover:rotate-12 transition-transform" />
+                  {unreadCount > 0 && (
+                    <span className="absolute top-2 right-2 w-2 h-2 bg-orange-500 rounded-full border-2 border-black animate-pulse"></span>
+                  )}
+                </button>
+
+                <AnimatePresence>
+                  {isNotificationsOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 15, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 15, scale: 0.95 }}
+                      className="absolute right-0 mt-4 w-96 bg-white rounded-[2.5rem] shadow-2xl border border-gray-100 overflow-hidden z-[100]"
+                    >
+                      <div className="p-6 bg-slate-50 flex items-center justify-between border-b border-gray-100">
+                        <div>
+                          <h3 className="text-xs font-black text-black uppercase tracking-widest">Training Alerts</h3>
+                          <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mt-1">You have {unreadCount} unread sessions</p>
+                        </div>
+                        {unreadCount > 0 && (
+                          <button 
+                            onClick={markAllAsRead}
+                            className="text-[9px] font-black text-orange-600 uppercase tracking-widest hover:underline"
+                          >
+                            Mark All Clear
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="max-h-[400px] overflow-y-auto p-3">
+                        {notifications.length === 0 ? (
+                          <div className="py-12 text-center">
+                            <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                              <Bell className="w-8 h-8 text-slate-200" />
+                            </div>
+                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">No updates found</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            {notifications.map((notif) => (
+                              <div 
+                                key={notif.id}
+                                onClick={() => markAsRead(notif.id)}
+                                className={`
+                                  p-4 rounded-[1.5rem] transition-all cursor-pointer group relative
+                                  ${notif.is_read ? 'bg-transparent hover:bg-slate-50' : 'bg-orange-50/50 hover:bg-orange-100/50 border border-orange-100/50 shadow-sm'}
+                                `}
+                              >
+                                <div className="flex gap-4">
+                                  <div className={`
+                                    w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border
+                                    ${notif.is_read ? 'bg-slate-50 border-slate-100' : 'bg-white border-orange-100'}
+                                  `}>
+                                    {getNotificationIcon(notif.type)}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center justify-between mb-1">
+                                      <h4 className="text-[10px] font-black text-black uppercase tracking-wide truncate pr-4">{notif.title}</h4>
+                                      <span className="text-[8px] text-gray-400 font-bold uppercase shrink-0">
+                                        {new Date(notif.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                                      </span>
+                                    </div>
+                                    <p className="text-[10px] text-gray-500 font-medium leading-relaxed italic">{notif.message}</p>
+                                  </div>
+                                </div>
+                                {!notif.is_read && (
+                                  <div className="absolute top-4 right-4 w-1.5 h-1.5 bg-orange-600 rounded-full" />
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="p-4 bg-slate-50 border-t border-gray-100 text-center">
+                        <p className="text-[8px] text-gray-400 font-black uppercase tracking-[0.2em]">End of Transmission</p>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
 
               <div className="relative" ref={profileRef}>
                 <button 

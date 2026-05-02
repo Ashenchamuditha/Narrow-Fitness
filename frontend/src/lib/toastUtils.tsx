@@ -1,5 +1,5 @@
 import { toast } from 'react-hot-toast';
-import { Scissors, Check, X } from 'lucide-react';
+import { Scissors, Check, X, Dumbbell } from 'lucide-react';
 
 /**
  * Premium Confirmation Toast
@@ -114,4 +114,44 @@ export const promptAction = (message: string, defaultValue: string = ''): Promis
       </div>
     ), { duration: Infinity, position: 'top-center' });
   });
+};
+
+/**
+ * Premium Welcome Toast
+ * Shows a personalized welcome message for 10 seconds (Light Theme)
+ */
+export const showWelcomeToast = (name: string) => {
+  toast.custom((t) => (
+    <div
+      className={`${
+        t.visible ? 'animate-enter' : 'animate-leave'
+      } max-w-sm w-full bg-white shadow-[0_20px_50px_rgba(0,0,0,0.15)] rounded-[24px] pointer-events-auto flex items-center border-2 border-orange-500/10 overflow-hidden p-5 gap-5`}
+    >
+      <div className="w-14 h-14 bg-orange-50 rounded-2xl flex items-center justify-center shrink-0 border-2 border-orange-100 relative group">
+        <div className="absolute inset-0 bg-orange-500/10 rounded-2xl animate-pulse group-hover:animate-none" />
+        <Dumbbell className="w-7 h-7 text-orange-600 relative z-10 -rotate-12" />
+      </div>
+      
+      <div className="flex-1">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-600/70">Member Access Granted</p>
+        </div>
+        <h3 className="text-lg font-black text-slate-900 uppercase italic leading-none tracking-tighter">
+          Welcome back, <span className="text-orange-600">{name}</span>
+        </h3>
+        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.1em] mt-2 flex items-center gap-1">
+           Ready to crush your goals today?
+        </p>
+      </div>
+
+      <button
+        onClick={() => toast.dismiss(t.id)}
+        className="w-10 h-10 flex items-center justify-center rounded-2xl bg-slate-50 hover:bg-orange-600 transition-all text-slate-400 hover:text-white group border border-slate-100"
+        title="Dismiss Welcome Note"
+      >
+        <Scissors className="w-4 h-4 group-hover:rotate-12 transition-transform" />
+      </button>
+    </div>
+  ), { duration: 10000, position: 'top-center' });
 };

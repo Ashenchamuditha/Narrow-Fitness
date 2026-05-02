@@ -458,6 +458,16 @@ memberRouter.put("/update-security", async (req, res) => {
     params.push(userId);
     const queryStr = `UPDATE users SET ${updates.join(", ")} WHERE id = $${params.length}`;
     await query(queryStr, params);
+
+    // Create Notification
+    await createInAppNotification(
+      req.app, 
+      userId, 
+      "Profile Updated", 
+      "Your account security details and profile have been successfully updated. Stay safe!",
+      "success"
+    );
+
     res.status(200).json({ success: true, message: "Account updated successfully!" });
   } catch (err) {
     res.status(500).json({ message: "Database error during security update." });
@@ -766,6 +776,37 @@ memberRouter.get("/membership/:userId", async (req, res) => {
     res.json(result.rows[0]);
   } catch (err: any) {
     res.status(500).json({ message: "Error fetching membership" });
+  }
+});
+
+// --- NOTIFICATION ROUTES ---
+memberRouter.get("/notifications/:userid", async (req, res) => {
+  try {
+    const result = await query(
+      "SELECT * FROM notifications WHERE userid = $1 ORDER BY created_at DESC LIMIT 20",
+      [req.params.userid]
+    );
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+memberRouter.put("/notifications/mark-read/:id", async (req, res) => {
+  try {
+    await query("UPDATE notifications SET is_read = TRUE WHERE id = $1", [req.params.id]);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+memberRouter.put("/notifications/mark-all-read/:userid", async (req, res) => {
+  try {
+    await query("UPDATE notifications SET is_read = TRUE WHERE userid = $1", [req.params.userid]);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
   }
 });
 

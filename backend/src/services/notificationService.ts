@@ -8,6 +8,29 @@ const NOTIFY_API_KEY = process.env.NOTIFY_API_KEY || '';
 const NOTIFY_USER_ID = process.env.NOTIFY_USER_ID || '';
 const NOTIFY_SENDER_ID = process.env.NOTIFY_SENDER_ID || 'NotifyDEMO';
 
+/**
+ * Creates an in-app notification and optionally emits a socket event
+ */
+export const createInAppNotification = async (app: any, userId: number, title: string, message: string, type: string = 'info') => {
+  try {
+    const result = await query(
+      `INSERT INTO notifications (userid, title, message, type) VALUES ($1, $2, $3, $4) RETURNING *`,
+      [userId, title, message, type]
+    );
+    
+    const notification = result.rows[0];
+    const io = app.get("socketio");
+    if (io) {
+      io.emit(`notification_${userId}`, notification);
+      io.emit('new_global_notification', notification); // For admin or global updates
+    }
+    
+    return notification;
+  } catch (err: any) {
+    console.error("❌ [NOTIFICATION SERVICE] Error:", err.message);
+  }
+};
+
 export const sendWhatsAppMessage = async (to: string, message: string) => {
   // Format number: Remove leading 0 and prepend 94 (Sri Lanka code)
   let formattedNumber = to.replace(/[^0-9]/g, ''); 

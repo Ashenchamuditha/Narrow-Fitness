@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import { confirmAction } from '../lib/toastUtils';
+import { confirmAction, showWelcomeToast } from '../lib/toastUtils';
 
 export default function Auth() {
   const [authMode, setAuthMode] = useState<'login' | 'signup' | 'forgot'>('login');
@@ -82,6 +82,11 @@ useEffect(() => {
     localStorage.setItem('narrow_fitness_token', data.token);
     localStorage.setItem('narrow_fitness_user', JSON.stringify(data.user));
     const role = data.user.role?.toLowerCase();
+
+    if (role !== 'admin') {
+      showWelcomeToast(data.user.name);
+    }
+
     if (role === 'admin') navigate('/admin');
     else if (!data.user.is_profile_complete) navigate('/member/onboarding', { replace: true });
     else navigate('/member');

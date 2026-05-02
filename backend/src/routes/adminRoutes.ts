@@ -5,6 +5,7 @@ import { Router } from "express";
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import nodemailer from 'nodemailer'; 
+import { createInAppNotification } from '../services/notificationService.js';
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',
@@ -22,6 +23,18 @@ transporter.verify((error) => {
 
 
 const adminRouter = Router();
+
+// --- NOTIFICATION HELPERS ---
+const notifyAllUsers = async (req: any, title: string, message: string, type: string = 'info') => {
+  try {
+    const users = await query("SELECT id FROM users WHERE role = 'user'");
+    for (const user of users.rows) {
+      await createInAppNotification(req.app, user.id, title, message, type);
+    }
+  } catch (err: any) {
+    console.error("❌ [GLOBAL NOTIFICATION] Error:", err.message);
+  }
+};
 
 // Helper to emit public refresh
 const emitPublicRefresh = (req: any) => {
@@ -311,6 +324,15 @@ adminRouter.post("/classes", async (req, res) => {
       "INSERT INTO classes (name, trainer_id, class_time, class_day, capacity, is_cancelled) VALUES ($1, $2, $3, $4, $5, false) RETURNING *",
       [name, trainer_id, class_time, class_day, capacity]
     );
+
+    // Global Notification
+    await notifyAllUsers(
+      req, 
+      "New Class Added!", 
+      `A new ${name} session has been scheduled for ${class_day} at ${class_time}. Book your spot now!`,
+      "info"
+    );
+
     emitPublicRefresh(req);
     res.status(201).json(result.rows[0]);
   } catch (err: any) {
@@ -387,6 +409,15 @@ adminRouter.post("/pricing", async (req, res) => {
       "INSERT INTO pricing (name, price, duration, features, is_popular) VALUES ($1, $2, $3, $4, $5) RETURNING *",
       [name, price, duration || 'Month', features || [], is_popular || false]
     );
+
+    // Global Notification
+    await notifyAllUsers(
+      req, 
+      "New Membership Plan!", 
+      `Check out our new ${name} plan for LKR ${price}/${duration}. Upgrade your elite experience today!`,
+      "success"
+    );
+
     emitPublicRefresh(req);
     res.status(201).json(result.rows[0]);
   } catch (err: any) {
