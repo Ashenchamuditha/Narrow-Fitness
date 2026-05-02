@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect, useRef } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
+import { io } from 'socket.io-client';
 import { 
   Dumbbell, 
   TrendingUp, 
@@ -51,6 +52,7 @@ export default function MemberDashboard() {
   const [isBmiModalOpen, setIsBmiModalOpen] = useState(false);
   const [bmiInputs, setBmiInputs] = useState({ weight: '', height: '' });
   const [bmiResult, setBmiResult] = useState<string | null>(null);
+  const [notificationPopup, setNotificationPopup] = useState<any>(null);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -59,6 +61,24 @@ export default function MemberDashboard() {
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [location.pathname]);
+
+  // --- NEW: SOCKET LISTENER FOR ATTENDANCE POPUP ---
+  useEffect(() => {
+    if (!user) return;
+    const socket = io(import.meta.env.VITE_API_URL || 'http://localhost:5000');
+    
+    socket.on(`notification_${user.id}`, (notif: any) => {
+      // Specifically look for check-in/out titles to show popup
+      if (notif.title.includes('Check-in') || notif.title.includes('Check-out')) {
+        setNotificationPopup(notif);
+        // Auto-close after 10 seconds
+        const timer = setTimeout(() => setNotificationPopup(null), 10000);
+        return () => clearTimeout(timer);
+      }
+    });
+
+    return () => { socket.disconnect(); };
+  }, [user]);
 
   useEffect(() => {
     let interval: any;
@@ -467,6 +487,15 @@ export default function MemberDashboard() {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {notificationPopup && (
+          <AttendancePopup 
+            notif={notificationPopup} 
+            onClose={() => setNotificationPopup(null)} 
+          />
+        )}
+      </AnimatePresence>
+
       <div className="min-h-screen bg-slate-50/50 -mt-10 pt-10 px-2 sm:px-0">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10">
           <div>
@@ -706,5 +735,48 @@ export default function MemberDashboard() {
         </div>
       </div>
     </MemberLayout>
+  );
+}
+
+function AttendancePopup({ notif, onClose }: { notif: any, onClose: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 50, scale: 0.9 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 50, scale: 0.9 }}
+      className="fixed bottom-24 right-4 left-4 sm:left-auto sm:right-8 z-[200] sm:w-80"
+    >
+      <div className="bg-white rounded-[2rem] p-6 shadow-2xl border border-orange-100 relative overflow-hidden group">
+        <button 
+          onClick={onClose}
+          className="absolute top-4 right-4 p-1.5 bg-slate-50 rounded-full text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
+        >
+          <X className="w-3 h-3" />
+        </button>
+        
+        <div className="flex items-center gap-4 mb-3">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${notif.title.includes('Check-in') ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'}`}>
+            {notif.title.includes('Check-in') ? <LogIn className="w-5 h-5" /> : <LogOut className="w-5 h-5" />}
+          </div>
+          <div>
+            <h4 className="text-[11px] font-black uppercase tracking-widest text-black leading-none">{notif.title}</h4>
+            <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-1">Real-time Update</p>
+          </div>
+        </div>
+        
+        <p className="text-[10px] font-bold text-slate-600 leading-relaxed italic pr-4">
+          "{notif.message}"
+        </p>
+        
+        <div className="absolute bottom-0 left-0 h-1 bg-slate-50 w-full">
+          <motion.div 
+            initial={{ width: '100%' }}
+            animate={{ width: 0 }}
+            transition={{ duration: 10, ease: 'linear' }}
+            className={`h-full ${notif.title.includes('Check-in') ? 'bg-green-500' : 'bg-orange-500'}`}
+          />
+        </div>
+      </div>
+    </motion.div>
   );
 }

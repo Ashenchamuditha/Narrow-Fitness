@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { query } from "../index.js";
+import { createInAppNotification } from '../services/notificationService.js';
 
 const attendanceRouter = Router();
 
@@ -274,6 +275,19 @@ attendanceRouter.post("/check-in", async (req, res) => {
     );
     
     console.log(`✅ Check-in success: User ${userId}`);
+    
+    // Trigger In-App Notification
+    try {
+      await createInAppNotification(
+        req.app, 
+        userId, 
+        "Check-in Success", 
+        "Welcome to Narrow Fitness! Your training session has started. Push your limits today!",
+        "success",
+        "/member"
+      );
+    } catch (nErr) { console.error("Notification failed:", nErr); }
+
     const io = req.app.get("socketio");
     if (io) io.emit("silent_admin_refresh");
 
@@ -323,6 +337,19 @@ attendanceRouter.post("/check-out", async (req, res) => {
     );
 
     console.log(`✅ Check-out success: User ${userId}, Duration: ${duration}m`);
+
+    // Trigger In-App Notification
+    try {
+      await createInAppNotification(
+        req.app, 
+        userId, 
+        "Check-out Success", 
+        `Session completed. You trained for ${duration} minutes. Great work today!`,
+        "info",
+        "/member"
+      );
+    } catch (nErr) { console.error("Notification failed:", nErr); }
+
     const io = req.app.get("socketio");
     if (io) io.emit("silent_admin_refresh");
 

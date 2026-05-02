@@ -310,24 +310,24 @@ export default function MemberLayout({ children, fullWidth = false }: MemberLayo
                       initial={{ opacity: 0, y: 15, scale: 0.95 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 15, scale: 0.95 }}
-                      className="absolute right-0 mt-4 w-96 bg-white rounded-[2.5rem] shadow-2xl border border-gray-100 overflow-hidden z-[100]"
+                      className="fixed sm:absolute inset-x-4 sm:inset-auto sm:right-0 sm:top-full top-24 mt-0 sm:mt-4 sm:w-96 bg-white rounded-[2rem] shadow-2xl border border-gray-100 overflow-hidden z-[100]"
                     >
-                      <div className="p-6 bg-slate-50 flex items-center justify-between border-b border-gray-100">
+                      <div className="p-5 sm:p-6 bg-slate-50 flex items-center justify-between border-b border-gray-100">
                         <div>
-                          <h3 className="text-xs font-black text-black uppercase tracking-widest">Training Alerts</h3>
-                          <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mt-1">You have {unreadCount} unread sessions</p>
+                          <h3 className="text-[10px] sm:text-xs font-black text-black uppercase tracking-widest">Training Alerts</h3>
+                          <p className="text-[8px] sm:text-[9px] text-gray-400 font-bold uppercase tracking-widest mt-1">You have {unreadCount} unread sessions</p>
                         </div>
                         {unreadCount > 0 && (
                           <button 
                             onClick={markAllAsRead}
-                            className="text-[9px] font-black text-orange-600 uppercase tracking-widest hover:underline"
+                            className="text-[8px] sm:text-[9px] font-black text-orange-600 uppercase tracking-widest hover:underline"
                           >
                             Mark All Clear
                           </button>
                         )}
                       </div>
 
-                      <div className="max-h-[400px] overflow-y-auto p-3">
+                      <div className="max-h-[60vh] sm:max-h-[400px] overflow-y-auto p-2 sm:p-3">
                         {notifications.length === 0 ? (
                           <div className="py-12 text-center">
                             <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
