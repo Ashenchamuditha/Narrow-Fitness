@@ -25,11 +25,11 @@ transporter.verify((error) => {
 const adminRouter = Router();
 
 // --- NOTIFICATION HELPERS ---
-const notifyAllUsers = async (req: any, title: string, message: string, type: string = 'info') => {
+const notifyAllUsers = async (req: any, title: string, message: string, type: string = 'info', redirectUrl?: string) => {
   try {
     const users = await query("SELECT id FROM users WHERE role = 'user'");
     for (const user of users.rows) {
-      await createInAppNotification(req.app, user.id, title, message, type);
+      await createInAppNotification(req.app, user.id, title, message, type, redirectUrl);
     }
   } catch (err: any) {
     console.error("❌ [GLOBAL NOTIFICATION] Error:", err.message);
@@ -330,7 +330,8 @@ adminRouter.post("/classes", async (req, res) => {
       req, 
       "New Class Added!", 
       `A new ${name} session has been scheduled for ${class_day} at ${class_time}. Book your spot now!`,
-      "info"
+      "info",
+      "/member/classes"
     );
 
     emitPublicRefresh(req);
@@ -415,7 +416,8 @@ adminRouter.post("/pricing", async (req, res) => {
       req, 
       "New Membership Plan!", 
       `Check out our new ${name} plan for LKR ${price}/${duration}. Upgrade your elite experience today!`,
-      "success"
+      "success",
+      "/pricing"
     );
 
     emitPublicRefresh(req);

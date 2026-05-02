@@ -11,11 +11,11 @@ const NOTIFY_SENDER_ID = process.env.NOTIFY_SENDER_ID || 'NotifyDEMO';
 /**
  * Creates an in-app notification and optionally emits a socket event
  */
-export const createInAppNotification = async (app: any, userId: number, title: string, message: string, type: string = 'info') => {
+export const createInAppNotification = async (app: any, userId: number, title: string, message: string, type: string = 'info', redirectUrl?: string) => {
   try {
     const result = await query(
-      `INSERT INTO notifications (userid, title, message, type) VALUES ($1, $2, $3, $4) RETURNING *`,
-      [userId, title, message, type]
+      `INSERT INTO notifications (userid, title, message, type, redirect_url) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [userId, title, message, type, redirectUrl || null]
     );
     
     const notification = result.rows[0];

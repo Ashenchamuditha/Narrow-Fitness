@@ -414,10 +414,15 @@ const initDB = async () => {
         title VARCHAR(255) NOT NULL,
         message TEXT NOT NULL,
         type VARCHAR(50) DEFAULT 'info',
+        redirect_url TEXT,
         is_read BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+    try {
+      await query("ALTER TABLE notifications ADD COLUMN IF NOT EXISTS redirect_url TEXT");
+    } catch (e) { /* ignore */ }
 
     // Inquiries and OTPs for inquiries
     await query(`

@@ -215,12 +215,21 @@ aiRouter.post("/process-media", upload.single('file'), async (req: any, res: Res
       const formData = new FormData();
       formData.append('file', new Blob([req.file.buffer], { type: mimeType }), fileName);
       formData.append('model', 'whisper-large-v3');
+      // Added prompt to improve accuracy for fitness terms and multi-language support (English/Sinhala)
+      formData.append('prompt', 'The user is talking about fitness, workouts, or diet. They might use English or Sinhala (phonetic or script). Examples: "Leg day today", "Mata diet plan ekak oni", "Kohomada workout eka?", "Show me my progress".');
+      
       const whisperRes = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
         method: "POST",
         headers: { "Authorization": `Bearer ${apiKey}` },
         body: formData
       });
       const whisperData: any = await whisperRes.json();
+      
+      if (whisperData.error) {
+        console.error("❌ Whisper Error:", whisperData.error);
+        throw new Error(`Transcription API: ${whisperData.error.message}`);
+      }
+
       rawText = whisperData.text || "";
       
       // FOR VOICE: Return raw text immediately without summary to avoid "reasoning" or summary in input

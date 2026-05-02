@@ -27,6 +27,7 @@ interface Notification {
   title: string;
   message: string;
   type: string;
+  redirect_url?: string;
   is_read: boolean;
   created_at: string;
 }
@@ -137,6 +138,18 @@ export default function MemberLayout({ children, fullWidth = false }: MemberLayo
       socket.disconnect();
     };
   }, [navigate, location.pathname]);
+
+  const handleNotificationClick = async (notif: Notification) => {
+    if (!notif.is_read) {
+      await markAsRead(notif.id);
+    }
+    
+    setIsNotificationsOpen(false);
+    
+    if (notif.redirect_url) {
+      navigate(notif.redirect_url);
+    }
+  };
 
   const markAsRead = async (id: number) => {
     try {
@@ -327,7 +340,7 @@ export default function MemberLayout({ children, fullWidth = false }: MemberLayo
                             {notifications.map((notif) => (
                               <div 
                                 key={notif.id}
-                                onClick={() => markAsRead(notif.id)}
+                                onClick={() => handleNotificationClick(notif)}
                                 className={`
                                   p-4 rounded-[1.5rem] transition-all cursor-pointer group relative
                                   ${notif.is_read ? 'bg-transparent hover:bg-slate-50' : 'bg-orange-50/50 hover:bg-orange-100/50 border border-orange-100/50 shadow-sm'}

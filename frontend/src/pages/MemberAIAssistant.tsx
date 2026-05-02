@@ -90,6 +90,7 @@ export default function MemberAIAssistant() {
   const [currentSid, setCurrentSid] = useState<number | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [input, setInput] = useState('');
+  const [activeInputType, setActiveInputType] = useState<'text' | 'voice'>('text');
   const [isLoading, setIsLoading] = useState(false);
   const [isProcessingMedia, setIsProcessingMedia] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<Attachment[]>([]);
@@ -176,7 +177,7 @@ export default function MemberAIAssistant() {
   const handleSendMessage = async () => {
     if ((!input.trim() && attachedFiles.length === 0) || isLoading || limitReached) return;
 
-    const currentInputType = attachedFiles.length > 0 ? 'file' : 'text';
+    const currentInputType = attachedFiles.length > 0 ? 'file' : activeInputType;
     const currentFileName = attachedFiles.length > 0 ? attachedFiles[0].name : null;
 
     let finalMessage = input;
@@ -195,6 +196,7 @@ export default function MemberAIAssistant() {
     }]);
     
     setInput('');
+    setActiveInputType('text'); // Reset to text after sending
     setAttachedFiles([]); 
     setIsLoading(true);
     setTimeout(scrollToBottom, 50);
@@ -261,7 +263,10 @@ export default function MemberAIAssistant() {
 
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        if (audioBlob.size < 1000) return; 
+        if (audioBlob.size < 1000) {
+          toast.error("Audio too short. Please try again.");
+          return;
+        }
 
         setIsProcessingMedia(true);
         const formData = new FormData();
@@ -273,9 +278,14 @@ export default function MemberAIAssistant() {
           if (res.ok && data.text) {
             // Preview the exact transcription in the input field before sending
             setInput(data.text);
+            setActiveInputType('voice');
+            toast.success("Voice detected. Review and send whenever you're ready!");
+          } else {
+            toast.error("Could not understand the audio. Try again.");
           }
         } catch (err) {
           console.error("Voice transcription failed", err);
+          toast.error("Transcription service unavailable.");
         } finally {
           setIsProcessingMedia(false);
           stream.getTracks().forEach(track => track.stop());
@@ -288,54 +298,6 @@ export default function MemberAIAssistant() {
       toast.error("Please allow microphone access for voice input.");
       console.error(err);
     }
-  };
-
-  const handleSendVoiceMessage = async (voiceText: string) => {
-    if (!voiceText.trim() || isLoading || limitReached) return;
-
-    const currentInputType = 'voice';
-    
-    const userMsgId = Date.now();
-    setMessages(prev => [...prev, { 
-        role: 'user', 
-        text: voiceText, 
-        id: userMsgId, 
-        createdAt: new Date(),
-        inputType: currentInputType
-    }]);
-    
-    setInput('');
-    setIsLoading(true);
-    setTimeout(scrollToBottom, 50);
-
-    try {
-      const res = await fetch('/api/member/ai/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          userId: user.id, 
-          message: voiceText, 
-          sessionId: currentSid, 
-          inputType: currentInputType 
-        })
-      });
-      const data = await res.json();
-      
-      if (res.ok) {
-        setMessages(prev => [...prev, { role: 'model', text: data.text, id: Date.now() + 1, createdAt: new Date() }]);
-        if (data.usage) {
-            setUsageInfo({
-              current: data.usage.current,
-              max: data.usage.max,
-              sessionMax: data.usage.sessionMax
-            });
-        }
-      } else if (res.status === 403 || res.status === 422) {
-        setLimitReached(true); setLockMessage(data.message);
-      }
-    } catch (error) {
-        console.error("AI Analysis Failed");
-    } finally { setIsLoading(false); setTimeout(scrollToBottom, 150); }
   };
 
   // --- SESSION MESSAGE COUNTER ---

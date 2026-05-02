@@ -425,24 +425,38 @@ memberRouter.get("/profile/:userId", async (req, res) => {
 // 10. Secure Security Update
 memberRouter.put("/update-security", async (req, res) => {
   const { userId, name, currentPassword, newPassword, profileImage } = req.body;
+  
   try {
+    console.log(`📡 [SECURITY UPDATE] Attempt for User ID: ${userId}`);
+    
     const userResult = await query("SELECT * FROM users WHERE id = $1", [userId]);
-    if (userResult.rows.length === 0) return res.status(404).json({ message: "User not found." });
+    if (userResult.rows.length === 0) {
+      console.warn(`⚠️ [SECURITY UPDATE] User ${userId} not found.`);
+      return res.status(404).json({ message: "User not found." });
+    }
     const dbUser = userResult.rows[0];
 
-    // Image-only quick bypass
-    if (profileImage && currentPassword === "BYPASS_FOR_IMAGE") {
+    // Image-only quick bypass (Used for rapid onboarding/sync)
+    if (profileImage !== undefined && currentPassword === "BYPASS_FOR_IMAGE") {
+      console.log(`📸 [SECURITY UPDATE] Image bypass triggered for User ${userId}`);
       await query("UPDATE users SET profile_image = $1 WHERE id = $2", [profileImage, userId]);
       return res.status(200).json({ success: true, message: "Photo updated!" });
     }
 
+    // Verify Password
     const isMatch = await bcrypt.compare(currentPassword, dbUser.password);
-    if (!isMatch) return res.status(401).json({ message: "The current password you entered is incorrect." });
+    if (!isMatch) {
+      console.warn(`🚫 [SECURITY UPDATE] Invalid password for User ${userId}`);
+      return res.status(401).json({ message: "The current password you entered is incorrect." });
+    }
 
     let updates = [];
     let params = [];
-    params.push(name || dbUser.name);
-    updates.push(`name = $${params.length}`);
+
+    if (name) {
+      params.push(name);
+      updates.push(`name = $${params.length}`);
+    }
 
     if (newPassword && newPassword.trim() !== "") {
       const hashedPass = await bcrypt.hash(newPassword, 10);
@@ -450,26 +464,46 @@ memberRouter.put("/update-security", async (req, res) => {
       updates.push(`password = $${params.length}`);
     }
 
-    if (profileImage) {
+    if (profileImage !== undefined) {
       params.push(profileImage);
       updates.push(`profile_image = $${params.length}`);
     }
 
+    if (updates.length === 0) {
+      return res.status(400).json({ message: "No updates provided." });
+    }
+
     params.push(userId);
     const queryStr = `UPDATE users SET ${updates.join(", ")} WHERE id = $${params.length}`;
+    
+    console.log(`📝 [SECURITY UPDATE] Executing SQL: ${queryStr}`);
     await query(queryStr, params);
 
-    // Create Notification
-    await createInAppNotification(
-      req.app, 
-      userId, 
-      "Profile Updated", 
-      "Your account security details and profile have been successfully updated. Stay safe!",
-      "success"
-    );
+    // Create Notification (Non-blocking)
+    try {
+      const isPictureOnly = profileImage !== undefined && !name && (!newPassword || newPassword.trim() === "");
+      const title = isPictureOnly ? "Avatar Updated" : "Profile Updated";
+      const message = isPictureOnly 
+        ? "Your athlete avatar has been successfully synchronized." 
+        : "Your account security details and profile have been successfully updated.";
+      
+      await createInAppNotification(
+        req.app, 
+        userId, 
+        title, 
+        message,
+        "success",
+        "/member/settings"
+      );
+    } catch (notifyErr: any) {
+      console.error("⚠️ [NOTIFICATION ERROR]:", notifyErr.message);
+    }
 
+    console.log(`✅ [SECURITY UPDATE] User ${userId} updated successfully.`);
     res.status(200).json({ success: true, message: "Account updated successfully!" });
-  } catch (err) {
+
+  } catch (err: any) {
+    console.error("❌ [SECURITY UPDATE FATAL ERROR]:", err.message);
     res.status(500).json({ message: "Database error during security update." });
   }
 });
