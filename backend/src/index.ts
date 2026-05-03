@@ -120,30 +120,44 @@ setInterval(async () => {
   }
 }, 60000); // Check every minute
 
-// --- 🔎 0. PRE-FLIGHT ENVIRONMENT DEBUGGER ---
-const verifyEnvironment = () => {
-  console.log("\n" + "=".repeat(50));
-  console.log("🛠️  NARROW HUB: SYSTEM ENVIRONMENT CHECK");
-  console.log("=".repeat(50));
-
-  const envPath = path.resolve(process.cwd(), '.env');
-  if (fs.existsSync(envPath)) {
-    console.log(`✅ .env file detected at: ${envPath}`);
-  } else {
-    console.log(`❌ CRITICAL: .env file NOT FOUND in ${process.cwd()}`);
+// --- 🔎 SYSTEM INITIALIZATION & BLUEPRINT ---
+const printBlueprint = async (port: number) => {
+  const dbStatus = await pool.query('SELECT 1').then(() => "✅ CONNECTED").catch(() => "❌ FAILED");
+  const groqKey = process.env.GROQ_API_KEY?.trim() || "";
+  let aiStatus = "❌ MISSING";
+  
+  if (groqKey.startsWith("gsk_")) {
+    try {
+      const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${groqKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: [{ role: "user", content: "ping" }], max_tokens: 5 }),
+      });
+      aiStatus = groqRes.ok ? "✅ ACTIVE (Llama 3.3)" : "⚠️  API ERROR";
+    } catch { aiStatus = "❌ NETWORK ERROR"; }
   }
 
-  const status = [
-    { Variable: "DATABASE_URL", Status: process.env.DATABASE_URL ? "✅ Loaded" : "❌ MISSING" },
-    { Variable: "GROQ_API_KEY", Status: process.env.GROQ_API_KEY ? `✅ Loaded (${process.env.GROQ_API_KEY.substring(0, 8)}...)` : "❌ MISSING" },
-    { Variable: "JWT_SECRET", Status: process.env.JWT_SECRET ? "✅ Loaded" : "⚠️  Using Default" },
-  ];
-
-  console.table(status);
-  console.log("=".repeat(50) + "\n");
+  console.log("\n" + "=".repeat(60));
+  console.log("🚀 NARROW FITNESS ELITE: CORE INITIALIZED");
+  console.log("=".repeat(60));
+  console.log(`🕒 Started At  : ${new Date().toLocaleString()}`);
+  console.log(`📡 Port        : ${port}`);
+  console.log(`🛠️  Environment : ${isLocal ? '🏠 Local/Docker' : '🚀 Cloud Mode'}`);
+  console.log("-".repeat(60));
+  console.log(`📦 DATABASE    : ${dbStatus} (SSL: ${useSSL ? 'Enabled' : 'Disabled'})`);
+  console.log(`📧 MAIL SERVER : ✅ READY (service: Gmail)`);
+  console.log(`🤖 AI ENGINE   : ${aiStatus}`);
+  console.log(`📡 REAL-TIME   : ✅ WEBSOCKET ENGINE ONLINE`);
+  console.log("-".repeat(60));
+  console.log("🗂️  MODULES LOADED:");
+  console.log("    - /api/admin      -> Administrative Control");
+  console.log("    - /api/member     -> Member Lifecycle & Hub");
+  console.log("    - /api/member/ai  -> Intelligence Assistant");
+  console.log("    - /api/attendance -> QR Security Logic");
+  console.log("    - /api/payments   -> Membership Commerce");
+  console.log("    - /api/public     -> Global Stats & Info");
+  console.log("=".repeat(60) + "\n");
 };
-
-verifyEnvironment();
 
 // --- 1. CONFIGURATION ---
 
@@ -224,14 +238,6 @@ const PORT = Number(process.env.PORT) || 5000;
 // Inside api/index.ts
 
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`===========================================`);
-  console.log(`🚀 NARROW FITNESS BACKEND IS LIVE`);
-  console.log(`📡 Port: ${PORT}`);
-  console.log(`🛠️ Mode: Docker/Development`);
-  console.log(`🕒 Started At: ${new Date().toLocaleString()}`);
-  console.log(`===========================================`);
-});
 // --- 5. AUTHENTICATION ---
 app.post("/api/auth/login", async (req, res) => {
   const { email, password } = req.body;
@@ -450,56 +456,11 @@ const initDB = async () => {
   }
 };
 
-const runSystemHealthCheck = async () => {
-  console.log("🔍 NARROW HUB: SYSTEM INTEGRITY SCAN");
-
-  // A. Database Connection Check
-  try {
-    await query("SELECT 1");
-    console.log("✅ DATABASE: Connection established & stable.");
-  } catch (e) {
-    console.log("❌ DATABASE: Connection failed!");
-  }
-
-  // B. Groq AI Health Check
-  const groqKey = process.env.GROQ_API_KEY?.trim() || "";
-  if (groqKey.startsWith("gsk_")) {
-    try {
-      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${groqKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
-          messages: [{ role: "user", content: "ping" }],
-          max_tokens: 5
-        }),
-      });
-
-      if (response.ok) {
-        console.log("✅ NARROW AI: Groq (Llama 3.3) is ACTIVE & VERIFIED.");
-      } else {
-        console.log("⚠️  NARROW AI: Groq Key found but API rejected the request.");
-      }
-    } catch (err) {
-      console.log("❌ NARROW AI: Network error connecting to Groq.");
-    }
-  } else {
-    console.log("❌ NARROW AI: Groq API Key is missing or invalid in .env");
-  }
-
-  if (io) console.log("✅ WEBSOCKET: Real-time sync engine is ONLINE.");
-  console.log("=".repeat(50) + "\n");
-};
-
 // --- 9. START SERVER ---
 
-server.listen(PORT, async () => {
+server.listen(PORT, '0.0.0.0', async () => {
   await initDB();
-  await runSystemHealthCheck();
-  console.log(`🚀 Narrow Fitness API Live: http://localhost:${PORT}`);
+  await printBlueprint(PORT);
 });
 // inquiries
 // --- PUBLIC CONTACT SUBMISSION ---

@@ -28,7 +28,9 @@ export default function MemberSettings() {
   const [verifyPurpose, setVerifyPurpose] = useState<'profile' | 'image' | 'delete_image' | 'account' | null>(null);
 
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [tempImage, setTempImage] = useState<string | null>(null);
+  const [viewImage, setViewImage] = useState<string | null>(null);
 
   const navigate = useNavigate();
 
@@ -256,6 +258,26 @@ export default function MemberSettings() {
         )}
       </AnimatePresence>
 
+      {/* --- FULL VIEW MODAL --- */}
+      <AnimatePresence>
+        {isViewModalOpen && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md" onClick={() => setIsViewModalOpen(false)}>
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }} 
+              animate={{ opacity: 1, scale: 1 }} 
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="relative max-w-2xl w-full"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button onClick={() => setIsViewModalOpen(false)} className="absolute -top-12 right-0 p-2 text-white hover:text-orange-500 transition-all">
+                <X className="w-8 h-8" />
+              </button>
+              <img src={viewImage!} className="w-full rounded-[2rem] shadow-2xl border border-white/10" alt="Full View" />
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <div className="min-h-screen bg-slate-50/50 -mt-10 pt-10 px-2 sm:px-0 pb-20">
         <div className="mb-10">
           <h1 className="text-4xl font-black text-slate-900 uppercase italic tracking-tighter">Account <span className="text-orange-600">Settings</span></h1>
@@ -278,6 +300,46 @@ export default function MemberSettings() {
                 <motion.div key="account" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="space-y-8">
                   <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
                     <h3 className="text-xl font-black uppercase italic mb-8 flex items-center gap-2 text-slate-900"><User className="w-6 h-6 text-orange-600" /> Identity Management</h3>
+                    
+                    {/* --- PROFILE PICTURE SECTION --- */}
+                    <div className="flex flex-col md:flex-row items-center gap-8 mb-10 pb-10 border-b border-slate-50">
+                      <div className="relative group">
+                        <div className="w-24 h-24 rounded-3xl bg-orange-50 flex items-center justify-center overflow-hidden border-4 border-white shadow-xl relative">
+                          {user.profile_image ? (
+                            <img src={user.profile_image} alt="Profile" className="w-full h-full object-cover" />
+                          ) : (
+                            <User className="w-10 h-10 text-orange-500" />
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex-1 text-center md:text-left">
+                        <h4 className="text-sm font-black uppercase tracking-widest mb-2">Profile Avatar</h4>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-4">Update your profile picture for the Hub</p>
+                        <div className="flex items-center justify-center md:justify-start gap-3">
+                          {user.profile_image && (
+                            <button 
+                              onClick={() => { setViewImage(user.profile_image); setIsViewModalOpen(true); }}
+                              className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl font-black uppercase tracking-widest text-[9px] hover:bg-slate-200 transition-all flex items-center gap-2"
+                            >
+                              <Eye className="w-3.5 h-3.5" /> View
+                            </button>
+                          )}
+                          <label className="px-4 py-2 bg-black text-white rounded-xl font-black uppercase tracking-widest text-[9px] cursor-pointer hover:bg-orange-600 transition-all flex items-center gap-2">
+                            <Camera className="w-3.5 h-3.5" /> {user.profile_image ? 'Change Photo' : 'Add Photo'}
+                            <input type="file" className="hidden" accept="image/*" onChange={handleFileSelect} />
+                          </label>
+                          {user.profile_image && (
+                            <button 
+                              onClick={() => triggerVerification('delete_image')}
+                              className="px-4 py-2 bg-red-50 text-red-600 rounded-xl font-black uppercase tracking-widest text-[9px] hover:bg-red-500 hover:text-white transition-all flex items-center gap-2"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" /> Remove
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="space-y-6">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
@@ -399,13 +461,18 @@ export default function MemberSettings() {
                 <div className="w-24 h-24 rounded-[2rem] bg-orange-100 mx-auto mb-6 flex items-center justify-center overflow-hidden border-4 border-white shadow-xl relative group">
                   {user.profile_image ? <img src={user.profile_image} className="w-full h-full object-cover" alt="Profile" /> : <User className="w-10 h-10 text-orange-500" />}
                   
-                  <div className="absolute inset-0 bg-black/70 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all gap-4">
-                    <label className="cursor-pointer p-2 hover:bg-orange-500 rounded-lg transition-all">
+                  <div className="absolute inset-0 bg-black/70 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all gap-3">
+                    {user.profile_image && (
+                      <button onClick={() => { setViewImage(user.profile_image); setIsViewModalOpen(true); }} className="p-2 hover:bg-white/20 rounded-lg transition-all" title="View Large">
+                        <Eye className="w-5 h-5 text-white" />
+                      </button>
+                    )}
+                    <label className="cursor-pointer p-2 hover:bg-orange-500 rounded-lg transition-all" title="Change Photo">
                       <Camera className="w-5 h-5 text-white" />
                       <input type="file" className="hidden" accept="image/*" onChange={handleFileSelect} />
                     </label>
                     {user.profile_image && (
-                      <button onClick={() => triggerVerification('delete_image')} className="p-2 hover:bg-red-500 rounded-lg transition-all">
+                      <button onClick={() => triggerVerification('delete_image')} className="p-2 hover:bg-red-500 rounded-lg transition-all" title="Remove Photo">
                         <Trash2 className="w-5 h-5 text-white" />
                       </button>
                     )}

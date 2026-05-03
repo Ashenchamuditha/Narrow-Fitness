@@ -13,7 +13,9 @@ import {
   Check,
   AlertCircle,
   Dumbbell,
-  Camera
+  Camera,
+  X,
+  Loader2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
@@ -196,7 +198,8 @@ useEffect(() => {
           // 1. Update the object with the EXACT key used in your Guards
           const updatedUser = { 
             ...user, 
-            is_profile_complete: true 
+            is_profile_complete: true,
+            profile_image: formData.profileImage
           };
 
           // 2. Save to LocalStorage
@@ -232,31 +235,43 @@ useEffect(() => {
           >
             <div className="flex flex-col md:flex-row items-start md:items-center gap-8 mb-8">
               <div className="relative group">
-                <div className="w-24 h-24 rounded-3xl bg-orange-100 flex items-center justify-center overflow-hidden border-4 border-white shadow-xl">
+                <div className="w-24 h-24 rounded-3xl bg-orange-100 flex items-center justify-center overflow-hidden border-4 border-white shadow-xl relative">
                   {formData.profileImage ? (
                     <img src={formData.profileImage} alt="Profile" className="w-full h-full object-cover" />
                   ) : (
                     <User className="w-10 h-10 text-orange-500" />
                   )}
                 </div>
-                <label className="absolute -bottom-2 -right-2 w-8 h-8 bg-black text-white rounded-xl flex items-center justify-center cursor-pointer hover:bg-orange-600 transition-all shadow-lg">
-                  <Camera className="w-4 h-4" />
-                  <input 
-                    type="file" 
-                    className="hidden" 
-                    accept="image/*"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onloadend = () => {
-                          setFormData((prev: any) => ({ ...prev, profileImage: reader.result }));
-                        };
-                        reader.readAsDataURL(file);
-                      }
-                    }}
-                  />
-                </label>
+                <div className="absolute -bottom-2 -right-2 flex flex-col gap-2">
+                  <label className="w-8 h-8 bg-black text-white rounded-xl flex items-center justify-center cursor-pointer hover:bg-orange-600 transition-all shadow-lg" title="Change Photo">
+                    <Camera className="w-4 h-4" />
+                    <input 
+                      type="file" 
+                      className="hidden" 
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setFormData((prev: any) => ({ ...prev, profileImage: reader.result }));
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                  {formData.profileImage && (
+                    <button 
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, profileImage: '' }))}
+                      className="w-8 h-8 bg-red-500 text-white rounded-xl flex items-center justify-center cursor-pointer hover:bg-red-600 transition-all shadow-lg"
+                      title="Remove Photo"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
               </div>
               <div>
                 <h2 className="text-xl font-black uppercase italic tracking-tighter">Basic Information</h2>

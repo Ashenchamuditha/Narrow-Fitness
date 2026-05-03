@@ -175,7 +175,7 @@ export default function App() {
               <div className="text-red-500">❌</div>
             ) : null}
             
-            <div className="flex-1 font-bold text-xs uppercase tracking-widest leading-relaxed">
+            <div className="flex-1 font-bold text-xs uppercase tracking-tight leading-tight">
               {typeof t.message === 'function' ? t.message(t) : t.message}
             </div>
 

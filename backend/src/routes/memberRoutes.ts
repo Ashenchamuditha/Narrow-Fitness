@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { query } from '../index.js'; 
 import nodemailer from 'nodemailer';
 import jwt from 'jsonwebtoken';
+import { createInAppNotification } from '../services/notificationService.js';
 
 const memberRouter = Router();
 
@@ -408,6 +409,7 @@ memberRouter.get("/profile/:userId", async (req, res) => {
         mp.*, 
         u.subscription_status, 
         u.package_id,
+        u.profile_image,
         p.name as package_name
       FROM memberprofiles mp
       JOIN users u ON mp.userid = u.id
@@ -484,8 +486,8 @@ memberRouter.put("/update-security", async (req, res) => {
       const isPictureOnly = profileImage !== undefined && !name && (!newPassword || newPassword.trim() === "");
       const title = isPictureOnly ? "Avatar Updated" : "Profile Updated";
       const message = isPictureOnly 
-        ? "Your athlete avatar has been successfully synchronized." 
-        : "Your account security details and profile have been successfully updated.";
+        ? "You updated your profile picture successfully." 
+        : "You updated your account information successfully.";
       
       await createInAppNotification(
         req.app, 
@@ -495,6 +497,9 @@ memberRouter.put("/update-security", async (req, res) => {
         "success",
         "/member/settings"
       );
+
+      // Trigger Email
+      sendProfileUpdateEmail(dbUser.email, name || dbUser.name).catch(e => console.error(e));
     } catch (notifyErr: any) {
       console.error("⚠️ [NOTIFICATION ERROR]:", notifyErr.message);
     }
@@ -513,21 +518,63 @@ const sendGreetingEmail = async (email: string, name: string, data: any) => {
     to: email,
     subject: "YOUR PROFILE IS LIVE | Narrow Fitness Elite",
     html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; background-color: #000; color: #fff; padding: 40px; border-radius: 20px; border: 1px solid #333;">
-        <h1 style="color: #f97316; text-transform: uppercase; font-style: italic;">Welcome to the Elite, ${name}</h1>
-        <p style="color: #aaa; font-size: 14px;">Your registration and onboarding are officially complete. Your physical data has been synchronized with our AI coaching systems.</p>
+      <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: auto; background-color: #000; color: #fff; padding: 40px; border-radius: 24px; border: 1px solid #222; box-shadow: 0 20px 40px rgba(0,0,0,0.5);">
+        <div style="text-align: center; margin-bottom: 30px;">
+          <h1 style="color: #f97316; text-transform: uppercase; font-style: italic; letter-spacing: -1px; margin: 0; font-size: 28px;">Welcome to the Elite</h1>
+          <p style="color: #666; font-size: 12px; text-transform: uppercase; tracking: 2px; margin-top: 5px;">Narrow Fitness Digital Integration</p>
+        </div>
         
-        <div style="background-color: #111; padding: 20px; border-radius: 15px; border-left: 4px solid #f97316; margin: 25px 0;">
-          <h3 style="color: #f97316; margin-top: 0; font-size: 12px; text-transform: uppercase;">Blueprint Summary</h3>
-          <p style="margin: 5px 0; font-size: 14px;"><strong>Target Goal:</strong> ${data.goal}</p>
-          <p style="margin: 5px 0; font-size: 14px;"><strong>Starting Weight:</strong> ${data.weight} kg</p>
-          <p style="margin: 5px 0; font-size: 14px;"><strong>Height:</strong> ${data.height} cm</p>
+        <p style="color: #ccc; font-size: 15px; line-height: 1.6; text-align: center;">Hello ${name}, your registration and onboarding are officially complete. Your profile has been successfully synchronized with our elite performance tracking systems.</p>
+        
+        <div style="background: linear-gradient(145deg, #111, #050505); padding: 30px; border-radius: 20px; border: 1px solid #333; margin: 30px 0; text-align: center;">
+          <h3 style="color: #f97316; margin-top: 0; font-size: 12px; text-transform: uppercase; letter-spacing: 2px;">Your Blueprint</h3>
+          <p style="margin: 15px 0 0; font-size: 18px; font-weight: bold; color: #fff;">Goal: ${data.goal}</p>
+          <p style="color: #555; font-size: 11px; margin-top: 5px;">AI-Powered Training Protocols are now being generated.</p>
         </div>
 
-        <p style="font-size: 13px; color: #666; font-style: italic; text-align: center;">"Results are earned, not given. Your journey starts now."</p>
+        <p style="font-size: 13px; color: #888; font-style: italic; text-align: center; margin: 30px 0;">"The difference between who you are and who you want to be is what you do."</p>
         
-        <div style="text-align: center; margin-top: 30px;">
-          <a href="http://localhost:5173/member" style="background-color: #f97316; color: #fff; padding: 15px 30px; text-decoration: none; border-radius: 10px; font-weight: bold; font-size: 12px; text-transform: uppercase;">Access Member Hub</a>
+        <div style="text-align: center;">
+          <a href="http://localhost:5173/member" style="background-color: #f97316; color: #fff; padding: 18px 35px; text-decoration: none; border-radius: 12px; font-weight: 900; font-size: 13px; text-transform: uppercase; display: inline-block; transition: all 0.3s ease;">Enter Member Hub</a>
+        </div>
+
+        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #222; text-align: center;">
+          <p style="color: #444; font-size: 10px; text-transform: uppercase; letter-spacing: 1px;">© Narrow Fitness Elite | High Performance Standards</p>
+        </div>
+      </div>
+    `
+  };
+  return transporter.sendMail(mailOptions);
+};
+
+const sendProfileUpdateEmail = async (email: string, name: string) => {
+  const mailOptions = {
+    from: `"Narrow Fitness" <${process.env.EMAIL_USER}>`,
+    to: email,
+    subject: "PROFILE UPDATED SUCCESSFULLY | Narrow Fitness",
+    html: `
+      <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: auto; background-color: #ffffff; color: #1a1a1a; padding: 40px; border-radius: 24px; border: 1px solid #e5e7eb;">
+        <div style="text-align: center; margin-bottom: 30px;">
+          <div style="background-color: #f97316; width: 60px; height: 60px; border-radius: 15px; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center; color: white; font-size: 30px; font-weight: bold;">✓</div>
+          <h1 style="color: #111; text-transform: uppercase; font-style: italic; letter-spacing: -0.5px; margin: 0; font-size: 24px;">Profile Synchronized</h1>
+          <p style="color: #6b7280; font-size: 11px; text-transform: uppercase; tracking: 1px; margin-top: 5px;">Security & Data Confirmation</p>
+        </div>
+        
+        <p style="color: #374151; font-size: 15px; line-height: 1.6;">Hi ${name},</p>
+        <p style="color: #374151; font-size: 15px; line-height: 1.6;">This is a courtesy notification to confirm that your profile information has been successfully updated in the Narrow Fitness systems.</p>
+        
+        <div style="background-color: #f9fafb; padding: 25px; border-radius: 16px; border: 1px solid #f3f4f6; margin: 30px 0;">
+          <p style="margin: 0; font-size: 13px; color: #4b5563;">Your training protocols and AI recommendations have been recalibrated based on these new records to ensure maximum performance efficiency.</p>
+        </div>
+
+        <p style="color: #6b7280; font-size: 13px;">If you did not make these changes, please contact our security team immediately or reset your password in the account settings.</p>
+        
+        <div style="text-align: center; margin-top: 40px;">
+          <a href="http://localhost:5173/member/settings" style="background-color: #000; color: #fff; padding: 15px 30px; text-decoration: none; border-radius: 10px; font-weight: bold; font-size: 12px; text-transform: uppercase; display: inline-block;">Review Settings</a>
+        </div>
+
+        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #f3f4f6; text-align: center;">
+          <p style="color: #9ca3af; font-size: 10px; text-transform: uppercase;">Narrow Fitness Digital Management System</p>
         </div>
       </div>
     `
@@ -547,7 +594,9 @@ memberRouter.post("/profile-secure", async (req, res) => {
     if (!isMatch) return res.status(401).json({ message: "Verification failed." });
 
     const profileExists = await query("SELECT userid FROM memberprofiles WHERE userid = $1", [userId]);
-    if (profileExists.rows.length > 0) {
+    const isUpdate = profileExists.rows.length > 0;
+
+    if (isUpdate) {
         await query(`UPDATE memberprofiles SET gender=$2, dob=$3, phone=$4, address=$5, current_weight=$6, height=$7, target_weight=$8, medical_conditions=$9, medical_details=$10, has_injuries=$11, injury_details=$12, has_allergies=$13, allergy_details=$14, primary_goal=$15, activity_level=$16, emergency_contact_name=$17, emergency_contact_phone=$18, updated_at=now() WHERE userid = $1`, 
           [userId, gender, dob, phone, address, current_weight, height, target_weight, medical_conditions, medical_details, has_injuries, injury_details, has_allergies, allergy_details, primary_goal, activity_level, emergency_contact_name, emergency_contact_phone]);
     } else {
@@ -555,12 +604,22 @@ memberRouter.post("/profile-secure", async (req, res) => {
           [userId, gender, dob, phone, address, current_weight, height, target_weight, medical_conditions, medical_details, has_injuries, injury_details, has_allergies, allergy_details, primary_goal, activity_level, emergency_contact_name, emergency_contact_phone]);
     }
 
-    // Trigger Email
-    sendGreetingEmail(user.email, user.name, { goal: primary_goal, weight: current_weight, height: height }).catch(e => console.error(e));
+    // Trigger Email & Notification
+    try {
+      if (isUpdate) {
+        sendProfileUpdateEmail(user.email, user.name).catch(e => console.error(e));
+        await createInAppNotification(req.app, userId, "Profile Updated", "You updated your physical information successfully.", "success", "/member/settings");
+      } else {
+        sendGreetingEmail(user.email, user.name, { goal: primary_goal }).catch(e => console.error(e));
+        await createInAppNotification(req.app, userId, "Welcome to the Elite", "Your physical profile has been created and synchronized.", "success", "/member/settings");
+      }
+    } catch (notifyErr: any) {
+      console.error("⚠️ [NOTIFICATION ERROR]:", notifyErr.message);
+    }
     
-    res.status(200).json({ success: true, message: "Profile saved and synced." });
+    res.status(200).json({ success: true, message: isUpdate ? "Profile updated and synced." : "Profile created and synced." });
   } catch (err) {
-    res.status(500).json({ message: "Database Error" });
+    res.status(500).json({ success: false, message: "Database Error" });
   }
 });
 
@@ -573,7 +632,9 @@ memberRouter.post("/profile", async (req, res) => {
       const user = userRes.rows[0];
 
       const profileExists = await query("SELECT userid FROM memberprofiles WHERE userid = $1", [userId]);
-      if (profileExists.rows.length > 0) {
+      const isUpdate = profileExists.rows.length > 0;
+
+      if (isUpdate) {
         await query(`UPDATE memberprofiles SET gender=$2, dob=$3, phone=$4, address=$5, current_weight=$6, height=$7, target_weight=$8, medical_conditions=$9, medical_details=$10, has_injuries=$11, injury_details=$12, has_allergies=$13, allergy_details=$14, primary_goal=$15, activity_level=$16, emergency_contact_name=$17, emergency_contact_phone=$18, updated_at=now() WHERE userid = $1`, 
           [userId, gender, dob, phone, address, weight, height, targetWeight, medicalConditions, medicalDetails, hasInjuries, injuryDetails, hasAllergies, allergyDetails, primaryGoal, activityLevel, emergencyName, emergencyPhone]);
       } else {
@@ -583,12 +644,22 @@ memberRouter.post("/profile", async (req, res) => {
 
       await query("UPDATE users SET is_profile_complete = TRUE, profile_image = $1 WHERE id = $2", [profileImage || null, userId]);
 
-      // Trigger Email
-      sendGreetingEmail(user.email, user.name, { goal: primaryGoal, weight: weight, height: height }).catch(e => console.error(e));
+      // Trigger Email & Notification
+      try {
+        if (isUpdate) {
+          sendProfileUpdateEmail(user.email, user.name).catch(e => console.error(e));
+          await createInAppNotification(req.app, userId, "Profile Updated", "You updated your physical information successfully.", "success", "/member/settings");
+        } else {
+          sendGreetingEmail(user.email, user.name, { goal: primaryGoal }).catch(e => console.error(e));
+          await createInAppNotification(req.app, userId, "Profile Complete", "Your registration is officially complete. Welcome!", "success", "/member/settings");
+        }
+      } catch (notifyErr: any) {
+        console.error("⚠️ [NOTIFICATION ERROR]:", notifyErr.message);
+      }
 
-      res.status(200).json({ message: "Welcome email sent and profile completed." });
+      res.status(200).json({ success: true, message: isUpdate ? "Profile updated." : "Welcome email sent and profile completed." });
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      res.status(500).json({ success: false, message: err.message });
     }
 });
 

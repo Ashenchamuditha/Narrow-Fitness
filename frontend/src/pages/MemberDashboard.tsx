@@ -113,6 +113,7 @@ export default function MemberDashboard() {
             ...parsedUser, 
             subscription_status: data.subscription_status,
             package_name: data.package_name,
+            profile_image: data.profile_image,
             profile_data: data 
           };
           setUser(updatedUser);
