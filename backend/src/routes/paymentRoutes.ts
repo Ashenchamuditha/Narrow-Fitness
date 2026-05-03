@@ -113,26 +113,33 @@ paymentRouter.post("/payhere/notify", async (req, res) => {
       const pkg = pkgRes.rows[0];
       console.log(`📦 [DB] Package identified: ${pkg.name} (${pkg.duration})`);
 
-      const balance_due = Math.max(0, parseFloat(pkg.price) - parseFloat(payhere_amount));
+      // 2. Fetch Existing Membership Balance
+      const currentMemRes = await query("SELECT balance_due FROM memberships WHERE userid = $1", [userId]);
+      const currentBalance = currentMemRes.rows.length > 0 ? parseFloat(currentMemRes.rows[0].balance_due) : 0;
+      console.log(`💰 [DB] Current User Balance: LKR ${currentBalance}`);
 
-      // 2. Insert Payment
+      // 3. Calculate Cumulative Balance
+      // Logic: (What you owed before + New Package Price) - What you just paid
+      const new_balance = (currentBalance + parseFloat(pkg.price)) - parseFloat(payhere_amount);
+      console.log(`📊 [DB] New Calculated Balance: LKR ${new_balance}`);
+
+      // 4. Insert Payment Record
       console.log(`📝 [DB] Recording payment in 'payments' table...`);
-      const uniquePaymentId = (payment_id && payment_id !== '0') ? payment_id : `INTERNAL_${order_id}`;
+      const uniquePaymentId = (payment_id && payment_id !== '0') ? payment_id : order_id;
       
       const payRes = await query(
         `INSERT INTO payments (userid, package_id, amount_paid, balance_due, payment_method, status, payhere_payment_id, card_holder_name, card_no)
          VALUES ($1, $2, $3, $4, $5, 'completed', $6, $7, $8) RETURNING id`,
-        [userId, packageId, payhere_amount, balance_due, method, uniquePaymentId, cardHolder, cardNo]
+        [userId, packageId, payhere_amount, new_balance, method, uniquePaymentId, cardHolder, cardNo]
       );
       const paymentId = payRes.rows[0].id;
       console.log(`✅ [DB] Payment recorded successfully. Internal ID: ${paymentId}`);
 
-      // 3. Calculate Expiry
+      // 5. Calculate Expiry
       console.log(`📅 [DB] Calculating membership duration and expiry...`);
       let expiryDate = calculateExpiry(pkg.duration);
-      const currentMem = await query("SELECT expiry_date FROM memberships WHERE userid = $1", [userId]);
-      if (currentMem.rows.length > 0) {
-        const currentExpiry = new Date(currentMem.rows[0].expiry_date);
+      if (currentMemRes.rows.length > 0) {
+        const currentExpiry = new Date(currentMemRes.rows[0].expiry_date);
         if (currentExpiry > new Date()) {
           console.log("⏳ [DB] User has an active membership. Extending from current expiry...");
           const date = new Date(currentExpiry);
@@ -142,22 +149,22 @@ paymentRouter.post("/payhere/notify", async (req, res) => {
           expiryDate = date;
         }
       }
-      console.log(`🗓️ [DB] Target Expiry Date: ${expiryDate.toDateString()}`);
 
-      // 4. Update Membership
+      // 6. Update Membership Table (Cumulative)
       console.log(`🔄 [DB] Updating 'memberships' table for User: ${userId}...`);
       await query(
-        `INSERT INTO memberships (userid, package_id, last_payment_id, start_date, expiry_date, status)
-         VALUES ($1, $2, $3, CURRENT_DATE, $4, 'active')
+        `INSERT INTO memberships (userid, package_id, last_payment_id, start_date, expiry_date, status, balance_due)
+         VALUES ($1, $2, $3, CURRENT_DATE, $4, 'active', $5)
          ON CONFLICT (userid) DO UPDATE SET
            package_id = EXCLUDED.package_id,
            last_payment_id = EXCLUDED.last_payment_id,
            expiry_date = EXCLUDED.expiry_date,
+           balance_due = EXCLUDED.balance_due,
            status = 'active',
            updated_at = CURRENT_TIMESTAMP`,
-        [userId, packageId, paymentId, expiryDate]
+        [userId, packageId, paymentId, expiryDate, new_balance]
       );
-      console.log(`✅ [DB] Membership table updated to ACTIVE.`);
+      console.log(`✅ [DB] Membership table updated to ACTIVE with Cumulative Balance.`);
 
       // 5. Update User Record
       console.log(`👤 [DB] Updating user profile and package associations...`);
@@ -190,6 +197,18 @@ paymentRouter.post("/payhere/notify", async (req, res) => {
         } else {
           console.warn(`⚠️ [WHATSAPP STATUS] Skipped: No phone number found for ${userName}.`);
         }
+
+        // --- NEW: IN-APP NOTIFICATION ---
+        console.log(`🔔 [NOTIFY] Triggering in-app notification for User ${userId}...`);
+        await createInAppNotification(
+          req.app,
+          userId,
+          "Elite Access Active!",
+          `Your payment of LKR ${payhere_amount} for ${pkg.name} was successful. Syncing profile...`,
+          "success",
+          "/member/payments"
+        );
+        console.log(`✅ [NOTIFY] Notification dispatched.`);
       } catch (notifyErr: any) {
         console.error("❌ [NOTIFY ERROR] Receipt/Notification failed:", notifyErr.message);
       }
@@ -215,34 +234,45 @@ paymentRouter.post("/manual-cash", async (req, res) => {
     if (pkgRes.rows.length === 0) return res.status(404).json({ message: "Package not found" });
     const pkg = pkgRes.rows[0];
 
-    const balance_due = parseFloat(pkg.price) - parseFloat(amountPaid);
+    // Fetch existing balance
+    const currentMemRes = await query("SELECT balance_due FROM memberships WHERE userid = $1", [userId]);
+    const currentBalance = currentMemRes.rows.length > 0 ? parseFloat(currentMemRes.rows[0].balance_due) : 0;
+
+    // Calculate new cumulative balance
+    const new_balance = (currentBalance + parseFloat(pkg.price)) - parseFloat(amountPaid);
 
     const payRes = await query(
       `INSERT INTO payments (userid, package_id, amount_paid, balance_due, payment_method, status, source)
        VALUES ($1, $2, $3, $4, 'cash', 'completed', 'admin_manual') RETURNING id`,
-      [userId, packageId, amountPaid, balance_due]
+      [userId, packageId, amountPaid, new_balance]
     );
     const paymentId = payRes.rows[0].id;
 
+    // Generate a professional reference ID for the manual payment
+    const manualRefId = `NF-CASH-${1000 + paymentId}`;
+    await query("UPDATE payments SET payhere_payment_id = $1 WHERE id = $2", [manualRefId, paymentId]);
+
     const expiry = calculateExpiry(pkg.duration);
     await query(
-      `INSERT INTO memberships (userid, package_id, last_payment_id, start_date, expiry_date, status)
-       VALUES ($1, $2, $3, CURRENT_DATE, $4, 'active')
+      `INSERT INTO memberships (userid, package_id, last_payment_id, start_date, expiry_date, status, balance_due)
+       VALUES ($1, $2, $3, CURRENT_DATE, $4, 'active', $5)
        ON CONFLICT (userid) DO UPDATE SET
          package_id = EXCLUDED.package_id,
          last_payment_id = EXCLUDED.last_payment_id,
          expiry_date = EXCLUDED.expiry_date,
+         balance_due = EXCLUDED.balance_due,
          status = 'active',
          updated_at = CURRENT_TIMESTAMP`,
-      [userId, packageId, paymentId, expiry]
+      [userId, packageId, paymentId, expiry, new_balance]
     );
 
     await query("UPDATE users SET package_id = $1 WHERE id = $2", [packageId, userId]);
 
-    const pdfLink = await generateReceiptPDF(paymentId);
-    // await sendWhatsAppMessage(...)
+    const pdfFilename = await generateReceiptPDF(paymentId);
+    const receiptUrl = `/uploads/${pdfFilename}`;
+    await query("UPDATE payments SET receipt_url = $1 WHERE id = $2", [receiptUrl, paymentId]);
 
-    res.json({ message: "Cash payment recorded and membership activated", receipt: pdfLink });
+    res.json({ message: "Cash payment recorded and membership activated", receipt: receiptUrl });
   } catch (err: any) {
     res.status(500).json({ message: "Error recording cash payment", error: err.message });
   }

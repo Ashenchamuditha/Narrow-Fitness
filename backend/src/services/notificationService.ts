@@ -66,22 +66,29 @@ export const sendWhatsAppMessage = async (to: string, message: string) => {
 };
 
 export const generateReceiptPDF = async (paymentId: number) => {
-  console.log(`🔨 [PDF] Starting generation for Payment ID: ${paymentId}`);
+  console.log(`🔨 [PDF] Generating Professional Receipt for ID: ${paymentId}`);
   const paymentRes = await query(`
-    SELECT p.*, u.name as user_name, u.email as user_email, pr.name as package_name, pr.duration as package_duration
+    SELECT 
+      p.*, 
+      u.name as user_name, 
+      u.email as user_email, 
+      pr.name as package_name, 
+      pr.duration as package_duration,
+      mp.phone as user_phone,
+      mp.address as user_address
     FROM payments p
     JOIN users u ON p.userid = u.id
     JOIN pricing pr ON p.package_id = pr.id
+    LEFT JOIN memberprofiles mp ON u.id = mp.userid
     WHERE p.id = $1
   `, [paymentId]);
 
   if (paymentRes.rows.length === 0) {
-    console.error(`❌ [PDF] Payment record ${paymentId} not found in DB!`);
     throw new Error("Payment not found");
   }
   const payment = paymentRes.rows[0];
 
-  const doc = new PDFDocument({ margin: 50 });
+  const doc = new PDFDocument({ margin: 50, size: 'A4' });
   const filename = `receipt_${paymentId}.pdf`;
   const filePath = path.join(process.cwd(), 'uploads', filename);
   const logoPath = path.join(process.cwd(), 'uploads', 'logo.jpeg');
@@ -94,78 +101,105 @@ export const generateReceiptPDF = async (paymentId: number) => {
     const stream = fs.createWriteStream(filePath);
     doc.pipe(stream);
 
-    // Header
+    // --- COLOR PALETTE ---
+    const ORANGE = '#f97316';
+    const BLACK = '#000000';
+    const GRAY = '#4b5563';
+    const LIGHT_GRAY = '#f3f4f6';
+
+    // --- HEADER SECTION ---
     if (fs.existsSync(logoPath)) {
-      doc.image(logoPath, 50, 45, { width: 60 });
+      doc.image(logoPath, 50, 45, { width: 50 });
     }
     
-    doc.fillColor('#000000')
-       .fontSize(20)
+    doc.fillColor(BLACK)
+       .font('Helvetica-Bold')
+       .fontSize(22)
        .text('NARROW FITNESS', 120, 50, { align: 'right' })
-       .fontSize(10)
-       .text('Elite Performance & Training Hub', 120, 75, { align: 'right' })
-       .text('Colombo, Sri Lanka | +94 77 123 4567', 120, 90, { align: 'right' });
+       .fontSize(9)
+       .font('Helvetica')
+       .fillColor(GRAY)
+       .text('ELITE PERFORMANCE & TRAINING HUB', 120, 75, { align: 'right' })
+       .text('30/1, Alwis Place, Colombo 03, Sri Lanka', 120, 88, { align: 'right' })
+       .text('Contact: +94 77 123 4567 | narrowfitness.lk', 120, 101, { align: 'right' });
 
     doc.moveDown(2);
-    doc.rect(50, 120, 500, 2).fill('#f97316'); // Orange line
+    doc.rect(50, 130, 500, 1.5).fill(LIGHT_GRAY);
 
-    // Receipt Info
-    const paymentDate = new Date(payment.created_at);
-    doc.moveDown(3);
-    doc.fillColor('#444444')
-       .fontSize(12)
+    // --- INFO GRID ---
+    const gridTop = 160;
+    const col2 = 300;
+
+    // LEFT COL: RECEIPT INFO
+    doc.fillColor(ORANGE).font('Helvetica-Bold').fontSize(10).text('TRANSACTION RECEIPT', 50, gridTop);
+    doc.fillColor(BLACK).font('Helvetica-Bold').fontSize(14).text(`#${payment.payhere_payment_id || `NF-CASH-${payment.id}`}`, 50, gridTop + 15);
+    
+    doc.fillColor(GRAY).font('Helvetica').fontSize(9).text('DATE:', 50, gridTop + 45);
+    doc.fillColor(BLACK).font('Helvetica-Bold').text(new Date(payment.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }).toUpperCase(), 100, gridTop + 45);
+
+    doc.fillColor(GRAY).font('Helvetica').text('METHOD:', 50, gridTop + 60);
+    doc.fillColor(BLACK).font('Helvetica-Bold').text(payment.payment_method.toUpperCase(), 100, gridTop + 60);
+
+    // RIGHT COL: BILL TO
+    doc.fillColor(GRAY).font('Helvetica-Bold').fontSize(9).text('BILL TO:', col2, gridTop);
+    doc.fillColor(BLACK).font('Helvetica-Bold').fontSize(12).text(payment.user_name.toUpperCase(), col2, gridTop + 15);
+    doc.fillColor(GRAY).font('Helvetica').fontSize(9)
+       .text(payment.user_email, col2, gridTop + 32)
+       .text(payment.user_phone || 'PHONE: N/A', col2, gridTop + 45)
+       .text(payment.user_address || 'ADDRESS: NOT PROVIDED', col2, gridTop + 58, { width: 250 });
+
+    // --- TABLE SECTION ---
+    const tableTop = 270;
+    doc.rect(50, tableTop, 500, 30).fill(BLACK);
+    doc.fillColor('#ffffff')
        .font('Helvetica-Bold')
-       .text(`RECEIPT NO: #NF-PAY-${payment.id}`)
-       .font('Helvetica')
-       .text(`DATE: ${paymentDate.toLocaleDateString().toUpperCase()}`)
-       .text(`TIME: ${paymentDate.toLocaleTimeString().toUpperCase()}`)
-       .moveDown();
+       .fontSize(9)
+       .text('DESCRIPTION', 70, tableTop + 11)
+       .text('DURATION', 280, tableTop + 11)
+       .text('STATUS', 380, tableTop + 11)
+       .text('TOTAL (LKR)', 480, tableTop + 11, { align: 'right' });
 
-    // Bill To
-    doc.fontSize(10).text('BILL TO:');
-    doc.fontSize(14).fillColor('#000000').font('Helvetica-Bold').text(payment.user_name.toUpperCase());
-    doc.fontSize(10).fillColor('#444444').font('Helvetica').text(payment.user_email);
-    doc.moveDown(2);
-
-    // Table Header
-    const tableTop = 280;
-    doc.rect(50, tableTop, 500, 25).fill('#f3f4f6');
-    doc.fillColor('#000000')
-       .fontSize(10)
-       .font('Helvetica-Bold')
-       .text('DESCRIPTION', 60, tableTop + 8)
-       .text('DURATION', 250, tableTop + 8)
-       .text('STATUS', 380, tableTop + 8)
-       .text('AMOUNT', 480, tableTop + 8, { align: 'right' });
-
-    // Table Content
-    const rowTop = tableTop + 35;
-    doc.fontSize(11)
-       .font('Helvetica')
-       .text(`${payment.package_name} Membership Plan`, 60, rowTop)
-       .text(payment.package_duration, 250, rowTop)
+    // TABLE ROW
+    const rowTop = tableTop + 50;
+    doc.fillColor(BLACK).font('Helvetica').fontSize(10)
+       .text(`${payment.package_name} Membership Plan`, 70, rowTop)
+       .text(payment.package_duration, 280, rowTop)
        .text(payment.status.toUpperCase(), 380, rowTop);
     
-    doc.fontSize(12).font('Helvetica-Bold').text(`LKR ${parseFloat(payment.amount_paid).toLocaleString()}`, 480, rowTop, { align: 'right' });
+    doc.font('Helvetica-Bold').fontSize(11).text(parseFloat(payment.amount_paid).toLocaleString(undefined, { minimumFractionDigits: 2 }), 480, rowTop, { align: 'right' });
 
-    // Summary
-    doc.moveDown(4);
-    const summaryTop = doc.y;
-    doc.rect(300, summaryTop, 250, 100).stroke('#eeeeee');
+    // SEPARATOR
+    doc.rect(50, rowTop + 25, 500, 0.5).fill(LIGHT_GRAY);
+
+    // --- SUMMARY SECTION ---
+    const summaryTop = rowTop + 60;
+    const summaryX = 350;
+
+    doc.fillColor(GRAY).font('Helvetica').fontSize(9).text('Subtotal:', summaryX, summaryTop);
+    doc.fillColor(BLACK).font('Helvetica-Bold').text(`LKR ${parseFloat(payment.amount_paid).toLocaleString()}`, 480, summaryTop, { align: 'right' });
+
+    doc.fillColor(GRAY).font('Helvetica').text('Balance Due:', summaryX, summaryTop + 20);
+    doc.fillColor(ORANGE).font('Helvetica-Bold').text(`LKR ${parseFloat(payment.balance_due).toLocaleString()}`, 480, summaryTop + 20, { align: 'right' });
+
+    // TOTAL BOX
+    doc.rect(330, summaryTop + 45, 220, 45).fill(LIGHT_GRAY);
+    doc.fillColor(BLACK).font('Helvetica-Bold').fontSize(10).text('TOTAL PAID:', 350, summaryTop + 62);
+    doc.fontSize(16).text(`LKR ${parseFloat(payment.amount_paid).toLocaleString()}`, 480, summaryTop + 59, { align: 'right' });
+
+    // --- FOOTER SECTION ---
+    const footerTop = 700;
+    doc.rect(50, footerTop, 500, 1).fill(LIGHT_GRAY);
     
-    doc.font('Helvetica').fontSize(10).fillColor('#444444').text('TOTAL PAID:', 320, summaryTop + 20);
-    doc.font('Helvetica-Bold').fontSize(14).fillColor('#000000').text(`LKR ${parseFloat(payment.amount_paid).toLocaleString()}`, 450, summaryTop + 18, { align: 'right' });
+    doc.fillColor(GRAY)
+       .font('Helvetica-Oblique')
+       .fontSize(9)
+       .text('THANK YOU FOR BEING PART OF THE NARROW FITNESS ELITE.', 50, footerTop + 20, { align: 'center' })
+       .font('Helvetica')
+       .fontSize(8)
+       .text('This is a computer-generated receipt. Valid for membership access. All payments are non-refundable.', 50, footerTop + 35, { align: 'center' });
 
-    doc.font('Helvetica').fontSize(10).fillColor('#f97316').text('BALANCE DUE:', 320, summaryTop + 50);
-    doc.font('Helvetica-Bold').fontSize(12).fillColor('#f97316').text(`LKR ${parseFloat(payment.balance_due).toLocaleString()}`, 450, summaryTop + 48, { align: 'right' });
-
-    doc.fontSize(10).fillColor('#444444').text('METHOD:', 320, summaryTop + 75);
-    doc.fontSize(10).fillColor('#000000').text(payment.payment_method.toUpperCase(), 450, summaryTop + 75, { align: 'right' });
-
-    // Footer
-    doc.moveDown(8);
-    doc.font('Helvetica-Oblique').fontSize(10).fillColor('#aaaaaa').text('Thank you for being part of the Narrow Fitness Elite.', { align: 'center' });
-    doc.font('Helvetica').text('Valid for membership access. Non-refundable.', { align: 'center' });
+    // AUTH SIGNATURE (Small professional touch)
+    doc.fillColor(BLACK).font('Helvetica-Bold').fontSize(7).text('AUTHORIZED BY NARROW FITNESS DIGITAL', 50, footerTop + 60, { align: 'center' });
 
     doc.end();
 

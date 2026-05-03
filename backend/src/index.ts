@@ -408,9 +408,15 @@ const initDB = async () => {
         start_date DATE NOT NULL,
         expiry_date DATE NOT NULL,
         status VARCHAR(20) DEFAULT 'active',
+        balance_due DECIMAL(10, 2) DEFAULT 0.00,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+    // Ensure balance_due exists for memberships
+    try {
+      await query("ALTER TABLE memberships ADD COLUMN IF NOT EXISTS balance_due DECIMAL(10, 2) DEFAULT 0.00");
+    } catch (e) { /* ignore */ }
 
     // Notifications Table
     await query(`

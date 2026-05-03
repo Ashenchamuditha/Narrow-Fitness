@@ -26,6 +26,7 @@ interface PaymentRecord {
   balance_due: string;
   payment_method: string;
   status: string;
+  payhere_payment_id: string;
   created_at: string;
 }
 
@@ -164,12 +165,18 @@ export default function MemberPayments() {
       <AnimatePresence>
         {showSuccessPopup && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-[3rem] p-10 max-sm w-full text-center shadow-2xl border-4 border-orange-500/20">
-              <div className="w-20 h-20 bg-green-100 rounded-[2rem] flex items-center justify-center mx-auto mb-6">
-                <CheckCircle2 className="w-10 h-10 text-green-600" />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }} 
+              animate={{ scale: 1, opacity: 1 }} 
+              exit={{ scale: 0.9, opacity: 0 }} 
+              className="bg-white rounded-[2.5rem] p-8 max-w-md w-full text-center shadow-2xl border-2 border-orange-500/10 relative overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 w-full h-1.5 bg-orange-600" />
+              <div className="w-16 h-16 bg-green-50 rounded-2xl flex items-center justify-center mx-auto mb-5">
+                <CheckCircle2 className="w-8 h-8 text-green-600" />
               </div>
-              <h3 className="text-3xl font-black uppercase italic tracking-tighter text-black leading-none mb-4">Payment Confirmed</h3>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-8">Your Elite access is now active</p>
+              <h3 className="text-2xl font-black uppercase italic tracking-tighter text-black mb-2">Payment Confirmed</h3>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-8">Elite Access Synchronized Successfully</p>
               
               <div className="space-y-3">
                 {lastPaymentId && (
@@ -178,16 +185,16 @@ export default function MemberPayments() {
                       window.open(`/api/payments/receipt/${lastPaymentId}`, '_blank');
                       window.location.href = '/member/payments';
                     }}
-                    className="w-full py-4 bg-black text-white rounded-2xl font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 hover:bg-orange-600 transition-all shadow-xl"
+                    className="w-full py-4 bg-black text-white rounded-xl font-black uppercase tracking-widest text-[9px] flex items-center justify-center gap-2 hover:bg-orange-600 transition-all shadow-lg"
                   >
-                    <Download className="w-4 h-4" /> View & Download Receipt
+                    <Download className="w-4 h-4" /> Download Digital Receipt
                   </button>
                 )}
                 <button 
                   onClick={() => { setShowSuccessPopup(false); window.location.href = '/member/payments'; }}
-                  className="w-full py-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-200 transition-all"
+                  className="w-full py-4 bg-slate-50 text-slate-500 rounded-xl font-black uppercase tracking-widest text-[9px] border border-slate-100 hover:bg-slate-100 transition-all"
                 >
-                  Close & Refresh Dashboard
+                  Return to Dashboard
                 </button>
               </div>
             </motion.div>
@@ -245,9 +252,29 @@ export default function MemberPayments() {
                           {displayPackageName}
                         </h2>
                         {membership && (
-                          <div className="mt-4 flex flex-wrap gap-4 text-slate-300">
-                             <div className="flex items-center gap-2"><Clock className="w-3 h-3 text-orange-500"/> <span className="text-[10px] font-bold uppercase">Expires: {new Date(membership.expiry_date).toLocaleDateString()}</span></div>
-                             {membership.balance_due > 0 && <div className="flex items-center gap-2"><Info className="w-3 h-3 text-red-500"/> <span className="text-[10px] font-bold uppercase text-red-400">Due: LKR {membership.balance_due}</span></div>}
+                          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 bg-white/5 p-6 rounded-3xl border border-white/10">
+                             <div>
+                               <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">Package Price</div>
+                               <div className="text-lg font-black text-white italic">LKR {Number(membership.package_price || 0).toLocaleString()}</div>
+                             </div>
+                             <div>
+                               <div className={`text-[9px] font-black uppercase tracking-widest mb-1 ${Number(membership.balance_due) < 0 ? 'text-green-500' : 'text-orange-500'}`}>
+                                 {Number(membership.balance_due) < 0 ? 'Credit Balance' : 'Outstanding Balance'}
+                               </div>
+                               <div className={`text-lg font-black italic ${Number(membership.balance_due) < 0 ? 'text-green-500' : 'text-orange-500'}`}>
+                                 LKR {Math.abs(Number(membership.balance_due || 0)).toLocaleString()}
+                               </div>
+                             </div>
+                             <div>
+                               <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">Next Payment Est.</div>
+                               <div className="text-lg font-black text-white italic">
+                                 LKR {Math.max(0, (Number(membership.package_price || 0) + Number(membership.balance_due || 0))).toLocaleString()}
+                               </div>
+                             </div>
+                             <div>
+                               <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">Expiry Protocol</div>
+                               <div className="text-lg font-black text-white italic">{new Date(membership.expiry_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase()}</div>
+                             </div>
                           </div>
                         )}
                       </div>
@@ -284,13 +311,23 @@ export default function MemberPayments() {
                       {plan.is_popular && <div className="absolute top-0 right-0 bg-orange-600 text-white px-5 py-1.5 rounded-bl-2xl text-[9px] font-black uppercase tracking-widest">Popular</div>}
                       <h4 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter mb-2">{plan.name}</h4>
                       <div className="text-3xl font-black text-slate-900 mb-8">LKR {Number(plan.price).toLocaleString()}<span className="text-[10px] text-slate-400"> / {plan.duration}</span></div>
-                      <ul className="space-y-4 mb-10 flex-1">
+                      
+                      <ul className="space-y-4 mb-8 flex-1">
                         {plan.features.map((f, i) => (
                           <li key={i} className="flex items-start gap-3 text-xs font-bold text-slate-600"><CheckCircle2 className="w-4 h-4 text-orange-500" /> {f}</li>
                         ))}
                       </ul>
-                      <div className={`mt-auto w-full py-4 rounded-2xl border-2 font-black uppercase tracking-widest text-[10px] text-center ${selectedPlan?.id === plan.id ? 'bg-orange-600 border-orange-600 text-white shadow-lg' : 'border-slate-100 text-slate-400'}`}>
-                        {selectedPlan?.id === plan.id ? 'Selected' : 'Select Plan'}
+
+                      <div className="space-y-3 mt-auto pt-6 border-t border-slate-50">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); startPayment(user.id, plan, user); }}
+                          className="w-full py-4 bg-black text-white rounded-2xl font-black uppercase tracking-widest text-[9px] hover:bg-orange-600 transition-all shadow-lg flex items-center justify-center gap-2"
+                        >
+                          <CreditCard className="w-4 h-4" /> Pay Online
+                        </button>
+                        <div className={`w-full py-3 rounded-xl border-2 font-black uppercase tracking-widest text-[8px] text-center ${selectedPlan?.id === plan.id ? 'bg-orange-50 border-orange-200 text-orange-600' : 'border-slate-50 text-slate-300'}`}>
+                          {selectedPlan?.id === plan.id ? 'Plan Selected' : 'Select for Code Activation'}
+                        </div>
                       </div>
                     </motion.div>
                   ))}
@@ -301,24 +338,39 @@ export default function MemberPayments() {
               <AnimatePresence>
                 {selectedPlan && (
                   <motion.section initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} className="relative px-2">
-                    <div className="bg-slate-900 rounded-[3rem] p-10 md:p-14 text-white shadow-2xl border border-white/5 flex flex-col md:flex-row justify-between items-center gap-8">
-                       <div className="flex items-center gap-6">
-                          <div className="w-20 h-20 bg-orange-600 rounded-[1.5rem] flex items-center justify-center shadow-2xl shadow-orange-600/30"><Key className="w-10 h-10 text-white" /></div>
+                    <div className="bg-slate-900 rounded-[3rem] p-10 md:p-14 text-white shadow-2xl border border-white/5 flex flex-col lg:flex-row justify-between items-center gap-10">
+                       <div className="flex items-center gap-6 flex-1">
+                          <div className="w-20 h-20 bg-orange-600 rounded-[1.5rem] flex items-center justify-center shadow-2xl shadow-orange-600/30 shrink-0"><Key className="w-10 h-10 text-white" /></div>
                           <div>
-                            <h3 className="text-3xl font-black uppercase italic tracking-tighter">Activate Plan</h3>
-                            <p className="text-slate-400 text-sm font-bold uppercase tracking-widest mt-1">Tier: <span className="text-orange-500 underline">{selectedPlan.name}</span></p>
+                            <h3 className="text-3xl font-black uppercase italic tracking-tighter mb-2">Manual Activation</h3>
+                            <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest leading-relaxed">
+                              Selected: <span className="text-orange-500 underline">{selectedPlan.name}</span> <br/>
+                              <span className="text-white/40 block mt-2 italic">Tip: If you paid cash to your coach, they will provide a unique 12-digit activation code. Enter it here to manually synchronize your elite status.</span>
+                            </p>
                           </div>
                        </div>
+                       
                        <div className="flex flex-col gap-4 w-full md:w-[400px]">
-                          <button onClick={handleOnlinePayment} className="w-full bg-white text-black py-5 rounded-2xl font-black uppercase tracking-widest text-xs transition-all shadow-xl hover:bg-orange-500 hover:text-white flex items-center justify-center gap-2">
-                            <CreditCard className="w-4 h-4" /> Pay Online (PayHere)
-                          </button>
                           <div className="relative">
-                            <input type="text" placeholder="PASTE ACTIVATION CODE" value={activationCode} onChange={(e) => setActivationCode(e.target.value.toUpperCase())} className="w-full bg-white/5 border-2 border-white/10 rounded-2xl py-5 px-6 focus:border-orange-500 font-black tracking-widest text-white uppercase" />
+                            <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2 block ml-1">Unique Activation Key</label>
+                            <input 
+                              type="text" 
+                              placeholder="NF-XXXX-XXXX" 
+                              value={activationCode} 
+                              onChange={(e) => setActivationCode(e.target.value.toUpperCase())} 
+                              className="w-full bg-white/5 border-2 border-white/10 rounded-2xl py-5 px-6 focus:border-orange-500 font-black tracking-widest text-white uppercase outline-none transition-all placeholder:text-white/10" 
+                            />
                           </div>
-                          <button onClick={handleActivation} disabled={isActivating} className="w-full bg-orange-600 text-white py-5 rounded-2xl font-black uppercase tracking-widest text-xs transition-all">
-                            {isActivating ? <Loader2 className="w-4 h-4 animate-spin" /> : "Verify with Code"}
+                          <button 
+                            onClick={handleActivation} 
+                            disabled={isActivating} 
+                            className="w-full bg-orange-600 text-white py-5 rounded-2xl font-black uppercase tracking-widest text-xs transition-all hover:bg-white hover:text-black shadow-xl shadow-orange-600/20 flex items-center justify-center gap-2"
+                          >
+                            {isActivating ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Verify & Sync Package <ChevronRight className="w-4 h-4"/></>}
                           </button>
+                          <p className="text-center text-[9px] font-bold text-slate-500 uppercase tracking-widest">
+                            Need help? Contact your head coach directly.
+                          </p>
                        </div>
                     </div>
                   </motion.section>
@@ -334,6 +386,7 @@ export default function MemberPayments() {
                     <thead>
                       <tr className="bg-slate-50">
                         <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Ref ID</th>
+                        <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Date & Time</th>
                         <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Package</th>
                         <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Amount</th>
                         <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Method</th>
@@ -344,7 +397,17 @@ export default function MemberPayments() {
                     <tbody className="divide-y divide-slate-100">
                       {history.length > 0 ? history.map((pay) => (
                         <tr key={pay.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="px-8 py-6 text-[10px] font-black text-slate-900 uppercase">#PAY-{pay.id}</td>
+                          <td className="px-8 py-6 text-[10px] font-black text-slate-900 uppercase">
+                            #{pay.payhere_payment_id || `PAY-${pay.id}`}
+                          </td>
+                          <td className="px-8 py-6">
+                            <div className="text-[10px] font-black text-slate-900 uppercase">
+                              {new Date(pay.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            </div>
+                            <div className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">
+                              {new Date(pay.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          </td>
                           <td className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase">{pay.package_name}</td>
                           <td className="px-8 py-6">
                             <div className="text-sm font-black text-slate-900">LKR {pay.amount_paid}</div>

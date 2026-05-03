@@ -110,7 +110,7 @@ export default function AdminPayments() {
             <tbody className="divide-y divide-gray-50">
               {payments.map((pay, i) => (
                 <tr key={i} className="hover:bg-gray-50/50 transition-colors">
-                  <td className="px-6 py-4 text-xs font-bold text-black uppercase tracking-widest">#PAY-{pay.id}</td>
+                  <td className="px-6 py-4 text-[9px] font-black text-black uppercase tracking-widest">#{pay.payhere_payment_id || `PAY-${pay.id}`}</td>
                   <td className="px-6 py-4">
                     <div className="text-sm font-bold text-black uppercase tracking-tight">{pay.member_name}</div>
                     <div className="text-[9px] font-medium text-gray-400 lowercase">{pay.member_email}</div>

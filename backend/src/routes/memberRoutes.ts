@@ -876,7 +876,12 @@ memberRouter.get("/payments/:userId", async (req, res) => {
 memberRouter.get("/membership/:userId", async (req, res) => {
   const { userId } = req.params;
   try {
-    const result = await query("SELECT * FROM memberships WHERE userid = $1", [userId]);
+    const result = await query(`
+      SELECT m.*, p.price as package_price, p.name as package_name
+      FROM memberships m
+      JOIN pricing p ON m.package_id = p.id
+      WHERE m.userid = $1
+    `, [userId]);
     if (result.rows.length === 0) return res.json({ status: 'inactive' });
     res.json(result.rows[0]);
   } catch (err: any) {
