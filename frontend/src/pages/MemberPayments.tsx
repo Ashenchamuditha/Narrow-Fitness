@@ -171,6 +171,32 @@ export default function MemberPayments() {
     setIsScanning(true);
     
     try {
+      // Check if it's the Wall QR URL
+      if (scannedResult.includes('/wall-pay')) {
+        if (!membership || !membership.package_id) {
+          toast.error("No active package found to pay for.");
+          setIsScanning(false);
+          return;
+        }
+
+        const currentPlan = plans.find(p => p.id === Number(membership.package_id));
+        if (!currentPlan) {
+          toast.error("Current package details not found.");
+          setIsScanning(false);
+          return;
+        }
+
+        toast.success(`Paying for: ${currentPlan.name}`);
+        stopScanner();
+        setIsScanModalOpen(false);
+        setIsScanning(false);
+        
+        setTimeout(() => {
+          startPayment(user.id, currentPlan, user);
+        }, 500);
+        return;
+      }
+
       // Expected QR format: NF_PLAN_ID or just ID
       const planIdStr = scannedResult.replace('NF_PLAN_', '');
       const planId = parseInt(planIdStr);
@@ -366,7 +392,7 @@ export default function MemberPayments() {
               onClick={() => setActiveTab('history')}
               className={`flex-1 md:flex-none px-4 sm:px-6 py-2.5 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'history' ? 'bg-black text-white shadow-lg' : 'text-slate-400 hover:text-black'}`}
             >
-              History
+              Payement History
             </button>
           </div>
         </div>

@@ -2,6 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect, useRef } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { io } from 'socket.io-client';
+import { QRCodeSVG } from 'qrcode.react';
 import { 
   Dumbbell, 
   TrendingUp, 
@@ -28,7 +29,8 @@ import {
   CheckCircle2,
   LogIn,
   LogOut,
-  AlertCircle
+  AlertCircle,
+  User as UserIcon
 } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
@@ -46,6 +48,7 @@ export default function MemberDashboard() {
   const [lastSession, setLastSession] = useState<any>(null);
   const [sessionDuration, setSessionDuration] = useState<number>(0);
   const [isScanModalOpen, setIsScanModalOpen] = useState(false);
+  const [isIdQrOpen, setIsIdQrOpen] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   
@@ -440,6 +443,36 @@ export default function MemberDashboard() {
       </AnimatePresence>
 
       <AnimatePresence>
+        {isIdQrOpen && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-[3rem] p-10 max-w-sm w-full text-center relative overflow-hidden">
+              <button onClick={() => setIsIdQrOpen(false)} className="absolute top-8 right-8 p-2 bg-slate-100 rounded-full hover:bg-red-50 transition-all text-slate-400"><X className="w-5 h-5" /></button>
+              
+              <div className="mb-8">
+                <div className="w-16 h-16 bg-orange-100 rounded-2xl flex items-center justify-center mx-auto mb-4 text-orange-600 shadow-inner">
+                  <UserIcon className="w-8 h-8" />
+                </div>
+                <h3 className="text-2xl font-black uppercase italic tracking-tighter text-black leading-none">Athlete Identity</h3>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">Personal Payment & Access QR</p>
+              </div>
+
+              <div className="p-8 bg-slate-50 rounded-[2.5rem] border-4 border-black mb-8 flex items-center justify-center">
+                <QRCodeSVG 
+                  value={`NF_USER_${user.id}`} 
+                  size={200}
+                  level="H"
+                  includeMargin={false}
+                />
+              </div>
+
+              <p className="text-slate-900 font-black uppercase italic tracking-tighter text-lg mb-1">{user.name}</p>
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-relaxed">Show this code to your coach for manual payment recording or attendance verification.</p>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
         {isScanModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
             <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="bg-white rounded-[3rem] p-10 max-sm w-full shadow-2xl relative overflow-hidden text-center">
@@ -531,14 +564,23 @@ export default function MemberDashboard() {
               <div>
                 <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3 mb-2">
                   <div className="text-[9px] sm:text-[10px] font-black text-orange-500 uppercase tracking-[0.3em]">Member Status</div>
-                  <span className={`text-[8px] sm:text-[9px] font-black px-2 py-0.5 rounded-lg uppercase tracking-widest border ${
-                    membership?.status === 'active' ? 'text-green-500 border-green-500/30 bg-green-500/10' : 
-                    membership?.status === 'grace_period' ? 'text-red-500 border-red-500/30 bg-red-500/10' :
-                    membership?.status === 'blocked' ? 'text-red-500 border-red-500/30 bg-red-500/10' :
-                    'text-slate-400 border-slate-700 bg-slate-800'
-                  }`}>
-                    {membership?.status || 'None'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[8px] sm:text-[9px] font-black px-2 py-0.5 rounded-lg uppercase tracking-widest border ${
+                      membership?.status === 'active' ? 'text-green-500 border-green-500/30 bg-green-500/10' : 
+                      membership?.status === 'grace_period' ? 'text-red-500 border-red-500/30 bg-red-500/10' :
+                      membership?.status === 'blocked' ? 'text-red-500 border-red-500/30 bg-red-500/10' :
+                      'text-slate-400 border-slate-700 bg-slate-800'
+                    }`}>
+                      {membership?.status || 'None'}
+                    </span>
+                    <button 
+                      onClick={() => setIsIdQrOpen(true)}
+                      className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-all border border-white/10"
+                      title="Show my Identity QR"
+                    >
+                      <QrCode className="w-3 h-3" />
+                    </button>
+                  </div>
                 </div>
                 <h2 className="text-2xl sm:text-3xl font-black uppercase italic tracking-tighter text-white leading-tight">
                   {user?.package_name || "Free Tier"} <span className="text-orange-500">Member</span>
