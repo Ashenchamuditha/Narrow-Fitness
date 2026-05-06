@@ -412,7 +412,8 @@ export default function MemberPayments() {
                           <td className="px-8 py-6">
                             <div className="text-sm font-black text-slate-900">LKR {pay.amount_paid}</div>
                             {parseFloat(pay.balance_due) > 0 && <div className="text-[9px] font-bold text-red-500 uppercase">Due: LKR {pay.balance_due}</div>}
-                          </td>
+                            {parseFloat(pay.balance_due) < 0 && <div className="text-[9px] font-bold text-green-500 uppercase">Credit: LKR {Math.abs(parseFloat(pay.balance_due))}</div>}
+                            </td>
                           <td className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase">{pay.payment_method}</td>
                           <td className="px-8 py-6">
                             <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${pay.status === 'completed' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>

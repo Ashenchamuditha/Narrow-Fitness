@@ -119,6 +119,7 @@ export default function AdminPayments() {
                   <td className="px-6 py-4">
                     <div className="text-sm font-black text-orange-600">LKR {pay.amount_paid}</div>
                     {parseFloat(pay.balance_due) > 0 && <div className="text-[9px] font-bold text-red-500 uppercase tracking-tighter">Due: LKR {pay.balance_due}</div>}
+                    {parseFloat(pay.balance_due) < 0 && <div className="text-[9px] font-bold text-green-500 uppercase tracking-tighter">Credit: LKR {Math.abs(parseFloat(pay.balance_due))}</div>}
                   </td>
                   <td className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">{pay.payment_method}</td>
                   <td className="px-6 py-4">

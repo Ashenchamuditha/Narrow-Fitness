@@ -550,7 +550,12 @@ export default function MemberDashboard() {
                     </p>
                     {membership.balance_due > 0 && (
                       <p className="text-[9px] font-bold text-red-400 uppercase tracking-widest animate-pulse">
-                        Balance: LKR {membership.balance_due}
+                        Due: LKR {membership.balance_due}
+                      </p>
+                    )}
+                    {membership.balance_due < 0 && (
+                      <p className="text-[9px] font-bold text-green-400 uppercase tracking-widest">
+                        Credit: LKR {Math.abs(membership.balance_due)}
                       </p>
                     )}
                   </div>

@@ -246,19 +246,28 @@ paymentRouter.post("/payhere/notify", async (req, res) => {
 // --- MANUAL CASH PAYMENT (ADMIN) ---
 paymentRouter.post("/manual-cash", async (req, res) => {
   const { userId, packageId, amountPaid } = req.body;
+  console.log(`💵 [ADMIN] Manual Cash Payment: User ${userId}, Package ${packageId}, Amount LKR ${amountPaid}`);
 
   try {
+    // 1. Get Package Details
     const pkgRes = await query("SELECT * FROM pricing WHERE id = $1", [packageId]);
-    if (pkgRes.rows.length === 0) return res.status(404).json({ message: "Package not found" });
+    if (pkgRes.rows.length === 0) {
+      console.error("❌ [ADMIN] Package not found!");
+      return res.status(404).json({ message: "Package not found" });
+    }
     const pkg = pkgRes.rows[0];
 
-    // Fetch existing balance
-    const currentMemRes = await query("SELECT balance_due FROM memberships WHERE userid = $1", [userId]);
+    // 2. Fetch Existing Membership Balance & Expiry
+    const currentMemRes = await query("SELECT balance_due, expiry_date FROM memberships WHERE userid = $1", [userId]);
     const currentBalance = currentMemRes.rows.length > 0 ? parseFloat(currentMemRes.rows[0].balance_due) : 0;
+    const existingExpiry = currentMemRes.rows.length > 0 ? currentMemRes.rows[0].expiry_date : null;
+    console.log(`💰 [DB] Current Balance: LKR ${currentBalance}, Existing Expiry: ${existingExpiry}`);
 
-    // Calculate new cumulative balance
+    // 3. Calculate Cumulative Balance
     const new_balance = (currentBalance + parseFloat(pkg.price)) - parseFloat(amountPaid);
+    console.log(`📊 [DB] New Calculated Balance: LKR ${new_balance}`);
 
+    // 4. Record Payment
     const payRes = await query(
       `INSERT INTO payments (userid, package_id, amount_paid, balance_due, payment_method, status, source)
        VALUES ($1, $2, $3, $4, 'cash', 'completed', 'admin_manual') RETURNING id`,
@@ -266,11 +275,16 @@ paymentRouter.post("/manual-cash", async (req, res) => {
     );
     const paymentId = payRes.rows[0].id;
 
-    // Generate a professional reference ID for the manual payment
+    // 5. Generate Professional Reference ID
     const manualRefId = `NF-CASH-${1000 + paymentId}`;
     await query("UPDATE payments SET payhere_payment_id = $1 WHERE id = $2", [manualRefId, paymentId]);
+    console.log(`✅ [DB] Payment recorded with ID: ${manualRefId}`);
 
-    const expiry = calculateExpiry(pkg.duration);
+    // 6. Calculate Cumulative Expiry (Using consistent logic)
+    const newExpiryStr = getUpdatedExpiry(existingExpiry, parseFloat(pkg.price), parseFloat(amountPaid), pkg.duration);
+    console.log(`🗓️ [DB] New Calculated Expiry: ${newExpiryStr}`);
+
+    // 7. Update Membership Table
     await query(
       `INSERT INTO memberships (userid, package_id, last_payment_id, start_date, expiry_date, status, balance_due)
        VALUES ($1, $2, $3, CURRENT_DATE, $4, 'active', $5)
@@ -281,17 +295,41 @@ paymentRouter.post("/manual-cash", async (req, res) => {
          balance_due = EXCLUDED.balance_due,
          status = 'active',
          updated_at = CURRENT_TIMESTAMP`,
-      [userId, packageId, paymentId, expiry, new_balance]
+      [userId, packageId, paymentId, newExpiryStr, new_balance]
     );
 
+    // 8. Update User Record
     await query("UPDATE users SET package_id = $1 WHERE id = $2", [packageId, userId]);
+    await query("UPDATE memberprofiles SET package = $1 WHERE userid = $2", [pkg.name, userId]);
+    console.log(`👤 [DB] User profile updated.`);
 
-    const pdfFilename = await generateReceiptPDF(paymentId);
-    const receiptUrl = `/uploads/${pdfFilename}`;
-    await query("UPDATE payments SET receipt_url = $1 WHERE id = $2", [receiptUrl, paymentId]);
+    // 9. Generate Receipt & Notifications
+    try {
+      console.log(`📄 [RECEIPT] Generating manual receipt for ID: ${paymentId}...`);
+      const pdfFilename = await generateReceiptPDF(paymentId);
+      const receiptUrl = `/uploads/${pdfFilename}`;
+      await query("UPDATE payments SET receipt_url = $1 WHERE id = $2", [receiptUrl, paymentId]);
+      console.log(`✅ [RECEIPT] Receipt ready: ${receiptUrl}`);
 
-    res.json({ message: "Cash payment recorded and membership activated", receipt: receiptUrl });
+      // In-App Notification for Member
+      console.log(`🔔 [NOTIFY] Triggering in-app notification for User ${userId}...`);
+      await createInAppNotification(
+        req.app,
+        userId,
+        "Membership Activated!",
+        `Your manual payment of LKR ${amountPaid} for ${pkg.name} was recorded. (Ref: ${manualRefId})`,
+        "success",
+        "/member/payments"
+      );
+      console.log(`✅ [NOTIFY] Notification dispatched.`);
+    } catch (notifyErr: any) {
+      console.error("❌ [ADMIN] Receipt/Notification failed:", notifyErr.message);
+    }
+
+    console.log(`🏁 [SUCCESS] Manual payment processing complete for User ${userId}.`);
+    res.json({ message: "Cash payment recorded and membership activated", receipt: manualRefId });
   } catch (err: any) {
+    console.error("❌ [ADMIN ERROR] Manual payment failed:", err.message);
     res.status(500).json({ message: "Error recording cash payment", error: err.message });
   }
 });

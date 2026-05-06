@@ -179,8 +179,12 @@ export const generateReceiptPDF = async (paymentId: number) => {
     doc.fillColor(GRAY).font('Helvetica').fontSize(9).text('Subtotal:', summaryX, summaryTop);
     doc.fillColor(BLACK).font('Helvetica-Bold').text(`LKR ${parseFloat(payment.amount_paid).toLocaleString()}`, 480, summaryTop, { align: 'right' });
 
-    doc.fillColor(GRAY).font('Helvetica').text('Balance Due:', summaryX, summaryTop + 20);
-    doc.fillColor(ORANGE).font('Helvetica-Bold').text(`LKR ${parseFloat(payment.balance_due).toLocaleString()}`, 480, summaryTop + 20, { align: 'right' });
+    const balance = parseFloat(payment.balance_due);
+    const balanceLabel = balance < 0 ? 'Credit Balance:' : 'Balance Due:';
+    const balanceColor = balance < 0 ? '#16a34a' : ORANGE; // Green for credit
+
+    doc.fillColor(GRAY).font('Helvetica').text(balanceLabel, summaryX, summaryTop + 20);
+    doc.fillColor(balanceColor).font('Helvetica-Bold').text(`LKR ${Math.abs(balance).toLocaleString()}`, 480, summaryTop + 20, { align: 'right' });
 
     // TOTAL BOX
     doc.rect(330, summaryTop + 45, 220, 45).fill(LIGHT_GRAY);
