@@ -1,14 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import MemberLayout from '../components/MemberLayout';
 import { 
   ShieldCheck, Zap, Star, Key, 
   Loader2, AlertCircle, CheckCircle2, ChevronRight,
-  Trash2, ArrowUpCircle, Info, XCircle, CreditCard, History, Download, Clock
+  Trash2, ArrowUpCircle, Info, XCircle, CreditCard, History, Download, Clock,
+  Scan, QrCode, X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-hot-toast';
 import { confirmAction } from '../lib/toastUtils';
 import { startPayment } from '../services/paymentService';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 
 interface PricingPlan {
   id: number;
@@ -42,6 +44,12 @@ export default function MemberPayments() {
   const [membership, setMembership] = useState<any>(null);
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const [lastPaymentId, setLastPaymentId] = useState<number | null>(null);
+
+  // QR Scan State
+  const [isScanModalOpen, setIsScanModalOpen] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -157,11 +165,141 @@ export default function MemberPayments() {
     }
   };
 
+  // QR Scanning Logic
+  const handleQrPayment = async (scannedResult: string) => {
+    if (isScanning) return;
+    setIsScanning(true);
+    
+    try {
+      // Expected QR format: NF_PLAN_ID or just ID
+      const planIdStr = scannedResult.replace('NF_PLAN_', '');
+      const planId = parseInt(planIdStr);
+      
+      if (isNaN(planId)) {
+        toast.error("Invalid Payment QR Code");
+        setIsScanning(false);
+        return;
+      }
+
+      const planToPay = plans.find(p => p.id === planId);
+      if (!planToPay) {
+        toast.error("Package not found in system.");
+        setIsScanning(false);
+        return;
+      }
+
+      toast.success(`Package Found: ${planToPay.name}`);
+      stopScanner();
+      setIsScanModalOpen(false);
+      setIsScanning(false);
+      
+      // Small delay for better UX before redirecting
+      setTimeout(() => {
+        startPayment(user.id, planToPay, user);
+      }, 500);
+
+    } catch (err) {
+      console.error("QR Payment Error:", err);
+      toast.error("Failed to process QR code.");
+      setIsScanning(false);
+    }
+  };
+
+  const stopScanner = async () => {
+    if (scannerRef.current) {
+      try {
+        if (scannerRef.current.isScanning) {
+          await scannerRef.current.stop();
+        }
+      } catch (err) {
+        console.error("Failed to stop scanner", err);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (isScanModalOpen) {
+      setCameraError(null);
+      const startCamera = async () => {
+        try {
+          await new Promise(resolve => setTimeout(resolve, 800));
+          const html5QrCode = new Html5Qrcode("payment-qr-reader");
+          scannerRef.current = html5QrCode;
+
+          const config = { 
+            fps: 15, 
+            qrbox: { width: 250, height: 250 },
+            formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
+          };
+
+          await html5QrCode.start(
+            { facingMode: "environment" }, 
+            config, 
+            (decodedText) => {
+              if (!isScanning) {
+                html5QrCode.stop();
+                handleQrPayment(decodedText);
+              }
+            },
+            () => {} 
+          );
+        } catch (err: any) {
+          console.error("Camera Error:", err);
+          setCameraError("Camera access denied or not found.");
+        }
+      };
+      startCamera();
+    } else {
+      stopScanner();
+    }
+    return () => { stopScanner(); };
+  }, [isScanModalOpen]);
+
   const isActive = user?.subscription_status === 'active' || membership?.status === 'active';
   const displayPackageName = plans.find(p => p.id === (membership?.package_id || user?.package_id))?.name || user?.package_name || "None Selected";
 
   return (
     <MemberLayout>
+      <AnimatePresence>
+        {isScanModalOpen && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full shadow-2xl relative overflow-hidden text-center">
+              <button onClick={() => setIsScanModalOpen(false)} className="absolute top-6 right-6 p-2 bg-slate-100 rounded-full hover:bg-red-50 transition-all text-slate-400"><X className="w-4 h-4" /></button>
+              
+              <div className="text-center mb-8">
+                <div className="w-16 h-16 bg-orange-100 rounded-2xl flex items-center justify-center mx-auto mb-4 text-orange-600 shadow-inner">
+                  <Scan className="w-8 h-8" />
+                </div>
+                <h3 className="text-2xl font-black uppercase italic tracking-tighter text-black">Scan to Pay</h3>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Point at the official gym package QR</p>
+              </div>
+
+              <div className="relative aspect-square bg-slate-900 rounded-[2rem] mb-8 overflow-hidden">
+                <div id="payment-qr-reader" className="w-full h-full overflow-hidden"></div>
+                {(isScanning || cameraError) && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-white bg-black/80 backdrop-blur-md z-20 p-6 text-center">
+                    {cameraError ? (
+                      <>
+                        <AlertCircle className="w-10 h-10 text-red-500 mb-2" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-red-500">{cameraError}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Loader2 className="w-10 h-10 animate-spin text-orange-500 mb-2" />
+                        <span className="text-[9px] font-black uppercase tracking-[0.3em]">Processing...</span>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+              <style>{`
+                #payment-qr-reader video { object-fit: cover !important; width: 100% !important; height: 100% !important; border-radius: 1.5rem; }
+              `}</style>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {showSuccessPopup && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
@@ -291,11 +429,20 @@ export default function MemberPayments() {
 
               {/* Available Plans */}
               <section id="available-plans">
-                <div className="flex items-center gap-3 mb-8 px-2">
-                   <div className="w-10 h-10 bg-black rounded-xl flex items-center justify-center">
-                      <Zap className="w-5 h-5 text-orange-500 fill-orange-500" />
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 px-2">
+                   <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-black rounded-xl flex items-center justify-center">
+                         <Zap className="w-5 h-5 text-orange-500 fill-orange-500" />
+                      </div>
+                      <h3 className="text-xl font-black text-slate-900 uppercase italic tracking-tighter">Choose Your Tier</h3>
                    </div>
-                   <h3 className="text-xl font-black text-slate-900 uppercase italic tracking-tighter">Choose Your Tier</h3>
+                   
+                   <button 
+                    onClick={() => setIsScanModalOpen(true)}
+                    className="flex items-center gap-2 px-6 py-3 bg-white border-2 border-slate-200 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:border-orange-500 hover:text-orange-600 transition-all shadow-sm"
+                   >
+                     <QrCode className="w-4 h-4" /> Scan QR to Pay
+                   </button>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
