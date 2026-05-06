@@ -3,6 +3,7 @@ import { query } from '../index.js';
 import multer from 'multer';
 import { createRequire } from 'module';
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import PDFDocument from 'pdfkit';
 
 const require = createRequire(import.meta.url);
 const mammoth = require('mammoth'); 
@@ -393,10 +394,17 @@ FACTS ABOUT THE ATHLETE:
 STRICT LANGUAGE PROTOCOL:
 1. DETECT: Identify if the user is speaking English or Sinhala/Singlish.
 2. ENGLISH: If user speaks English, respond ONLY in English.
-3. SINHALA: If user speaks Sinhala OR Singlish (phonetic Sinhala like "kohomada"), respond ONLY in Sinhala Script (සිංහල අකුරෙන්).
+3. SINHALA: If user speaks Sinhala OR Singlish (phonetic Sinhala like "kohomada", "ade thank you bn"), respond ONLY in Sinhala Script (සිංහල අකුරෙන්).
 4. NO SINGLISH: Never respond using Singlish (phonetic Sinhala). Always use proper Sinhala Script or English.
-5. PROFESSIONALISM: Maintain a professional, motivating coaching tone in both languages.
-6. CLARITY: Use simple and direct language to ensure the athlete understands the instructions clearly.
+5. NATURAL FLOW: Avoid stiff or literal translations in Sinhala. Use natural, warm, and conversational Sinhala (e.g., instead of "ඔබ හොඳ ආධාර ලබනවා", use "ඔබට ස්තූතියි! අපි ඔබගේ ඉලක්ක කරා යෑමට සූදානම්.").
+6. CASUAL HANDLING: If the user is friendly/casual (using "ade", "macho", "bn"), respond with high "coach energy"—be warm, supportive, and motivating in your Sinhala script response.
+
+STRICT WORKOUT & DIET PROTOCOLS:
+1. FRESH GENERATION: If the user asks for a "new", "fresh", or "different" workout/diet plan (e.g., "give me a new 2 day plan"), you MUST generate a completely new plan based on their stats. Do NOT just repeat the "Active Workout Context". Use the context only to avoid previous mistakes or to progress from it.
+2. SRI LANKAN DIET: All diet plans MUST be centered around Sri Lankan food culture. Include healthy versions of local foods like Red Rice, Dhal, Gotukola, Coconut Sambol (in moderation), Fish/Chicken Curries, Egg hoppers, and local fruits like Papaya and Mango.
+3. TABLE STRUCTURE: Use Markdown Tables for ALL workout routines (Exercise, Sets, Reps, Rest) and diet plans (Meal Time, Food Item, Portion).
+4. DISPLAY FIRST: You MUST always display the full plan (Workout or Diet) in the chat first using the Markdown table format. 
+5. PDF DOWNLOADS: Only AFTER displaying the full plan, inform the user they can download it as a professional PDF by clicking the download button that appears below your message. Do NOT just provide a download link or offer only the download.
 
 STRICT OPERATIONAL RULES:
 1. GREETINGS: Warmly mention readiness for their workout plan.
@@ -485,5 +493,137 @@ aiRouter.delete("/sessions/:id", async (req, res) => {
     res.json({ success: true });
   } catch (err) { res.status(500).json({ message: "fail" }); }
 });
+
+// --- 5. PDF GENERATION ENGINE ---
+aiRouter.post("/generate-plan-pdf", async (req, res) => {
+  const { content, title, userName } = req.body;
+  if (!content) return res.status(400).json({ message: "Content is required" });
+
+  try {
+    const doc = new PDFDocument({ margin: 40, size: 'A4' });
+    
+    // Set headers for PDF download
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="narrow_fitness_plan.pdf"`);
+
+    doc.pipe(res);
+
+    const ORANGE = '#f97316';
+    const BLACK = '#000000';
+    const GRAY = '#4b5563';
+
+    // Header
+    doc.fillColor(ORANGE).font('Helvetica-Bold').fontSize(24).text('NARROW FITNESS', { align: 'center' });
+    doc.fillColor(BLACK).font('Helvetica-Bold').fontSize(14).text('ELITE PERFORMANCE HUB', { align: 'center' });
+    doc.moveDown(1);
+    
+    doc.rect(40, doc.y, 515, 2).fill(ORANGE);
+    doc.moveDown(1);
+
+    doc.fillColor(BLACK).font('Helvetica-Bold').fontSize(18).text(title?.toUpperCase() || 'FITNESS & DIET PLAN');
+    doc.fontSize(10).font('Helvetica').fillColor(GRAY).text(`Athlete: ${userName || 'N/A'}`);
+    doc.text(`Generated: ${new Date().toLocaleDateString()}`);
+    doc.moveDown(2);
+
+    // Process Content - Improved Table Detection
+    const lines = content.split('\n');
+    let inTable = false;
+    let tableHeaders: string[] = [];
+    let tableRows: string[][] = [];
+
+    for (const line of lines) {
+        if (line.includes('|') && line.trim().startsWith('|')) {
+            const cells = line.split('|').filter(c => c.trim().length > 0).map(c => c.trim());
+            
+            if (line.includes('---')) {
+                inTable = true;
+                continue;
+            }
+
+            if (!inTable) {
+                tableHeaders = cells;
+                inTable = true;
+            } else {
+                tableRows.push(cells);
+            }
+        } else {
+            if (inTable && tableHeaders.length > 0) {
+                // Render Collected Table
+                renderPdfTable(doc, tableHeaders, tableRows);
+                tableHeaders = [];
+                tableRows = [];
+                inTable = false;
+                doc.moveDown(1);
+            }
+            
+            // Regular Text
+            if (line.trim()) {
+                const cleanLine = line.replace(/\*\*/g, '').replace(/#/g, '').trim();
+                if (line.startsWith('#')) {
+                    doc.fillColor(ORANGE).font('Helvetica-Bold').fontSize(14).text(cleanLine);
+                } else if (line.startsWith('**')) {
+                    doc.fillColor(BLACK).font('Helvetica-Bold').fontSize(11).text(cleanLine);
+                } else {
+                    doc.fillColor(BLACK).font('Helvetica').fontSize(10).text(line.trim());
+                }
+                doc.moveDown(0.5);
+            }
+        }
+    }
+
+    // Final table if content ends with one
+    if (inTable && tableHeaders.length > 0) renderPdfTable(doc, tableHeaders, tableRows);
+
+    doc.moveDown(2);
+    doc.rect(40, doc.y, 515, 1).fill('#eeeeee');
+    doc.moveDown(1);
+    doc.fillColor(GRAY).fontSize(8).text('Disclaimer: Consult with a medical professional before starting any new fitness or nutrition program. This plan is generated by the Narrow Fitness AI Assistant.', { align: 'center' });
+
+    doc.end();
+  } catch (err: any) {
+    console.error("PDF Gen Error:", err.message);
+    if (!res.headersSent) res.status(500).send("PDF Generation Failed");
+  }
+});
+
+function renderPdfTable(doc: any, headers: string[], rows: string[][]) {
+    const startX = 40;
+    const availableWidth = 515;
+    const colCount = Math.max(headers.length, 1);
+    const colWidth = availableWidth / colCount;
+    let currentY = doc.y;
+
+    // Header Background
+    doc.rect(startX, currentY, availableWidth, 20).fill('#000000');
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8);
+    
+    headers.forEach((h, i) => {
+        doc.text(h.toUpperCase(), startX + (i * colWidth) + 5, currentY + 6, { width: colWidth - 10, align: 'left' });
+    });
+
+    currentY += 20;
+    doc.fillColor('#000000').font('Helvetica').fontSize(8);
+
+    rows.forEach((row, rowIndex) => {
+        // Auto-page break if needed
+        if (currentY > 750) {
+            doc.addPage();
+            currentY = 40;
+        }
+
+        const rowHeight = 18;
+        if (rowIndex % 2 === 0) {
+            doc.rect(startX, currentY, availableWidth, rowHeight).fill('#f7f7f7');
+        }
+        
+        doc.fillColor('#000000');
+        row.forEach((cell, i) => {
+            doc.text(cell, startX + (i * colWidth) + 5, currentY + 5, { width: colWidth - 10, align: 'left' });
+        });
+        currentY += rowHeight;
+    });
+    
+    doc.y = currentY + 10;
+}
 
 export default aiRouter;

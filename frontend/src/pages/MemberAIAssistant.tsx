@@ -26,7 +26,7 @@ interface Attachment {
 
 // --- ELITE UI COMPONENTS ---
 
-const ChatMessages = memo(({ messages }: { messages: any[] }) => (
+const ChatMessages = memo(({ messages, onDownloadPDF }: { messages: any[], onDownloadPDF: (msg: any) => void }) => (
   <div className="space-y-10 pb-10">
     {messages.map((msg) => (
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} items-end gap-3`}>
@@ -62,6 +62,15 @@ const ChatMessages = memo(({ messages }: { messages: any[] }) => (
                 }
             }}>{msg.text}</ReactMarkdown>
           </div>
+
+          {msg.role === 'model' && (msg.text.includes('|') || msg.text.toLowerCase().includes('plan')) && (
+            <button 
+              onClick={() => onDownloadPDF(msg)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white transition-all text-[9px] font-black uppercase mt-6 shadow-sm border border-orange-100 group"
+            >
+              <FileText className="w-3.5 group-hover:scale-110 transition-transform" /> download plan (pdf)
+            </button>
+          )}
 
           <div className={`text-[8px] mt-4 opacity-30 font-black uppercase flex items-center gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
              <span className={msg.role === 'model' ? 'text-orange-600' : ''}>{msg.role === 'user' ? 'athlete' : 'coach'}</span>
@@ -300,6 +309,38 @@ export default function MemberAIAssistant() {
     }
   };
 
+  const handleDownloadPDF = async (msg: any) => {
+    const loadingToast = toast.loading("Generating professional PDF...");
+    try {
+      const currentSession = sessions.find(s => s.id === currentSid);
+      const res = await fetch('/api/member/ai/generate-plan-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          content: msg.text, 
+          title: currentSession?.title || 'Narrow Fitness Plan',
+          userName: user.name
+        })
+      });
+      
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Narrow_Fitness_${(currentSession?.title || 'Plan').replace(/\s+/g, '_')}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        toast.success("Plan downloaded successfully!", { id: loadingToast });
+      } else {
+        toast.error("Failed to generate PDF", { id: loadingToast });
+      }
+    } catch (err) {
+      toast.error("Download failed. System busy.", { id: loadingToast });
+    }
+  };
+
   // --- SESSION MESSAGE COUNTER ---
   const [sessionCount, setSessionCount] = useState(0);
 
@@ -417,7 +458,7 @@ export default function MemberAIAssistant() {
           </div>
 
           <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 lg:px-16 space-y-10 no-scrollbar bg-[#fcfcfc]">
-            <ChatMessages messages={messages} />
+            <ChatMessages messages={messages} onDownloadPDF={handleDownloadPDF} />
             {(isLoading || isProcessingMedia) && (
               <div className="flex justify-start items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center border border-orange-100"><RefreshCw className="w-4 text-orange-600 animate-spin" /></div>
