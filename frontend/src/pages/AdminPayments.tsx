@@ -5,6 +5,7 @@ import axios from 'axios';
 import { toast } from 'react-hot-toast';
 import { recordCashPayment } from '../services/paymentService';
 import QRCode from 'qrcode';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function AdminPayments() {
   const [payments, setPayments] = useState<any[]>([]);
@@ -19,7 +20,13 @@ export default function AdminPayments() {
   // Duration Stats
   const [startDate, setStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
-  const [visitStats, setVisitStats] = useState({ totalVisitors: 0, paidCount: 0, unpaidCount: 0 });
+  const [visitStats, setVisitStats] = useState({ 
+    totalVisitors: 0, 
+    paidCount: 0, 
+    unpaidCount: 0, 
+    details: { visitors: [], paid: [], unpaid: [] } 
+  });
+  const [drillDown, setDrillDown] = useState<{ title: string, members: any[] } | null>(null);
   const [isStatsLoading, setIsStatsLoading] = useState(false);
 
   useEffect(() => {
@@ -125,23 +132,63 @@ export default function AdminPayments() {
                </div>
 
                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 w-full lg:w-auto">
-                  <div className="bg-white/5 border border-white/10 p-5 rounded-3xl backdrop-blur-md min-w-[160px]">
+                  <button onClick={() => setDrillDown({ title: 'Total Visitors', members: visitStats.details?.visitors || [] })} className="bg-white/5 border border-white/10 p-5 rounded-3xl backdrop-blur-md min-w-[160px] text-left hover:bg-white/10 transition-all active:scale-95 group/card">
                      <div className="text-3xl font-black text-white mb-1">{visitStats.totalVisitors}</div>
-                     <div className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Total Visitors</div>
-                  </div>
-                  <div className="bg-emerald-500/10 border border-emerald-500/20 p-5 rounded-3xl backdrop-blur-md min-w-[160px]">
+                     <div className="text-[8px] font-black text-slate-500 uppercase tracking-widest group-hover/card:text-orange-500 transition-colors">Total Visitors</div>
+                  </button>
+                  <button onClick={() => setDrillDown({ title: 'Fully Paid Visitors', members: visitStats.details?.paid || [] })} className="bg-emerald-500/10 border border-emerald-500/20 p-5 rounded-3xl backdrop-blur-md min-w-[160px] text-left hover:bg-emerald-500/20 transition-all active:scale-95 group/card">
                      <div className="text-3xl font-black text-emerald-500 mb-1">{visitStats.paidCount}</div>
-                     <div className="text-[8px] font-black text-emerald-400 uppercase tracking-widest">Fully Paid</div>
-                  </div>
-                  <div className="bg-red-500/10 border border-red-500/20 p-5 rounded-3xl backdrop-blur-md min-w-[160px]">
+                     <div className="text-[8px] font-black text-emerald-400 uppercase tracking-widest group-hover/card:text-white transition-colors">Fully Paid</div>
+                  </button>
+                  <button onClick={() => setDrillDown({ title: 'Unpaid / Pending Visitors', members: visitStats.details?.unpaid || [] })} className="bg-red-500/10 border border-red-500/20 p-5 rounded-3xl backdrop-blur-md min-w-[160px] text-left hover:bg-red-500/20 transition-all active:scale-95 group/card">
                      <div className="text-3xl font-black text-red-500 mb-1">{visitStats.unpaidCount}</div>
-                     <div className="text-[8px] font-black text-red-400 uppercase tracking-widest">Unpaid/Pending</div>
-                  </div>
+                     <div className="text-[8px] font-black text-red-400 uppercase tracking-widest group-hover/card:text-white transition-colors">Unpaid/Pending</div>
+                  </button>
                </div>
             </div>
          </div>
          <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-orange-600/5 rounded-full blur-3xl" />
       </div>
+
+      {/* --- DRILL DOWN MODAL --- */}
+      <AnimatePresence>
+        {drillDown && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+              <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50">
+                <div>
+                  <h3 className="text-xl font-black uppercase italic tracking-tighter text-black">{drillDown.title}</h3>
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Member Directory for selected duration</p>
+                </div>
+                <button onClick={() => setDrillDown(null)} className="p-2 hover:bg-white rounded-xl transition-all shadow-sm border border-slate-100">
+                  <XCircle className="w-6 h-6 text-slate-300 hover:text-red-500" />
+                </button>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-6 space-y-4 no-scrollbar">
+                {drillDown.members.length > 0 ? drillDown.members.map((member, i) => (
+                  <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }} key={i} className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100 group hover:border-orange-500 transition-all">
+                    <div className="w-12 h-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center font-black text-orange-500 uppercase shadow-sm group-hover:scale-110 transition-transform">{member.name[0]}</div>
+                    <div>
+                      <div className="text-sm font-black text-slate-900 uppercase tracking-tight leading-none mb-1">{member.name}</div>
+                      <div className="text-[10px] font-bold text-slate-400 lowercase">{member.email}</div>
+                    </div>
+                  </motion.div>
+                )) : (
+                  <div className="py-20 text-center">
+                    <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100 opacity-20"><CreditCard className="w-8 h-8 text-slate-400" /></div>
+                    <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">No members detected in this category.</p>
+                  </div>
+                )}
+              </div>
+              
+              <div className="p-6 bg-slate-50 border-t border-slate-100 text-center">
+                <button onClick={() => setDrillDown(null)} className="px-8 py-3 bg-black text-white rounded-xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-orange-600 transition-all shadow-lg">Close View</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {wallQR && (
         <div className="mb-10 bg-white p-8 rounded-[2.5rem] border-2 border-orange-100 flex flex-col items-center">

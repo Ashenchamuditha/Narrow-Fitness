@@ -863,34 +863,48 @@ adminRouter.get("/members", async (req, res) => {
 
 adminRouter.get("/stats/visits-payments", async (req, res) => {
   const { startDate, endDate } = req.query;
+  console.log(`📊 Analytics Request: ${startDate} to ${endDate}`);
   try {
-    // 1. Total unique visitors in period
+    // 1. Total unique visitors in period (Detailed)
     const visitorsRes = await query(`
-      SELECT COUNT(DISTINCT userid) FROM attendance 
-      WHERE attendance_date BETWEEN $1 AND $2
+      SELECT DISTINCT u.id, u.name, u.email 
+      FROM attendance a
+      JOIN users u ON a.userid = u.id
+      WHERE a.attendance_date BETWEEN $1 AND $2
     `, [startDate, endDate]);
 
-    // 2. Paid vs Unpaid logic
-    // We consider a user "paid" if they have a completed payment within the last 30 days of the end date
-    const paidRes = await query(`
-      SELECT COUNT(DISTINCT userid) FROM payments 
-      WHERE status = 'completed' 
-      AND created_at >= ($1::date - INTERVAL '30 days')
-      AND userid IN (SELECT DISTINCT userid FROM attendance WHERE attendance_date BETWEEN $1 AND $2)
-    `, [endDate, startDate]);
+    console.log(`👣 Total Visitors Found: ${visitorsRes.rows.length}`);
 
-    const totalVisitors = parseInt(visitorsRes.rows[0].count) || 0;
-    const paidCount = parseInt(paidRes.rows[0].count) || 0;
-    const unpaidCount = Math.max(0, totalVisitors - paidCount);
+    // 2. Paid vs Unpaid logic (Detailed)
+    const paidRes = await query(`
+      SELECT DISTINCT u.id, u.name, u.email 
+      FROM payments p
+      JOIN users u ON p.userid = u.id
+      WHERE p.status = 'completed' 
+      AND p.created_at >= ($1::date - INTERVAL '30 days')
+      AND p.userid IN (SELECT DISTINCT userid FROM attendance WHERE attendance_date BETWEEN $1 AND $2)
+    `, [startDate, endDate]);
+
+    console.log(`💰 Paid Visitors Found: ${paidRes.rows.length}`);
+
+    const allVisitors = visitorsRes.rows;
+    const paidMembers = paidRes.rows;
+    const paidIds = new Set(paidMembers.map(m => m.id));
+    const unpaidMembers = allVisitors.filter(v => !paidIds.has(v.id));
 
     res.json({
-      totalVisitors,
-      paidCount,
-      unpaidCount
+      totalVisitors: allVisitors.length,
+      paidCount: paidMembers.length,
+      unpaidCount: unpaidMembers.length,
+      details: {
+        visitors: allVisitors,
+        paid: paidMembers,
+        unpaid: unpaidMembers
+      }
     });
   } catch (err: any) {
-    console.error("Visits Stats Error:", err.message);
-    res.status(500).json({ totalVisitors: 0, paidCount: 0, unpaidCount: 0 });
+    console.error("❌ Visits Stats Error:", err.message);
+    res.status(500).json({ totalVisitors: 0, paidCount: 0, unpaidCount: 0, details: { visitors: [], paid: [], unpaid: [] } });
   }
 });
 

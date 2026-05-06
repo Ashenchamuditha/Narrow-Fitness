@@ -522,16 +522,16 @@ export default function MemberDashboard() {
           </div>
         </div>
 
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-10 bg-slate-900 rounded-[2.5rem] p-8 text-white relative overflow-hidden shadow-2xl border border-white/5">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-10 bg-slate-900 rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 text-white relative overflow-hidden shadow-2xl border border-white/5">
           <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-8">
-            <div className="flex items-center gap-6">
-              <div className="w-20 h-20 bg-orange-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-orange-600/40">
-                <Zap className="w-10 h-10 text-white fill-white/20" />
+            <div className="flex flex-col sm:flex-row items-center sm:items-start md:items-center gap-6 text-center sm:text-left">
+              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-orange-600 rounded-2xl sm:rounded-3xl flex items-center justify-center shadow-2xl shadow-orange-600/40 shrink-0">
+                <Zap className="w-8 h-8 sm:w-10 sm:h-10 text-white fill-white/20" />
               </div>
               <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="text-[10px] font-black text-orange-500 uppercase tracking-[0.3em]">Member Status</div>
-                  <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg uppercase tracking-widest border ${
+                <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3 mb-2">
+                  <div className="text-[9px] sm:text-[10px] font-black text-orange-500 uppercase tracking-[0.3em]">Member Status</div>
+                  <span className={`text-[8px] sm:text-[9px] font-black px-2 py-0.5 rounded-lg uppercase tracking-widest border ${
                     membership?.status === 'active' ? 'text-green-500 border-green-500/30 bg-green-500/10' : 
                     membership?.status === 'grace_period' ? 'text-red-500 border-red-500/30 bg-red-500/10' :
                     membership?.status === 'blocked' ? 'text-red-500 border-red-500/30 bg-red-500/10' :
@@ -540,21 +540,21 @@ export default function MemberDashboard() {
                     {membership?.status || 'None'}
                   </span>
                 </div>
-                <h2 className="text-3xl font-black uppercase italic tracking-tighter text-white leading-none">
+                <h2 className="text-2xl sm:text-3xl font-black uppercase italic tracking-tighter text-white leading-tight">
                   {user?.package_name || "Free Tier"} <span className="text-orange-500">Member</span>
                 </h2>
                 {membership && (
-                  <div className="mt-3 flex items-center gap-4">
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                  <div className="mt-3 flex flex-wrap items-center justify-center sm:justify-start gap-x-4 gap-y-2">
+                    <p className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-widest">
                       Expires: <span className="text-white">{new Date(membership.expiry_date).toLocaleDateString()}</span>
                     </p>
                     {membership.balance_due > 0 && (
-                      <p className="text-[9px] font-bold text-red-400 uppercase tracking-widest animate-pulse">
+                      <p className="text-[8px] sm:text-[9px] font-bold text-red-400 uppercase tracking-widest animate-pulse">
                         Due: LKR {membership.balance_due}
                       </p>
                     )}
                     {membership.balance_due < 0 && (
-                      <p className="text-[9px] font-bold text-green-400 uppercase tracking-widest">
+                      <p className="text-[8px] sm:text-[9px] font-bold text-green-400 uppercase tracking-widest">
                         Credit: LKR {Math.abs(membership.balance_due)}
                       </p>
                     )}
@@ -562,7 +562,7 @@ export default function MemberDashboard() {
                 )}
               </div>
             </div>
-            <Link to="/member/payments" className="w-full md:w-auto bg-white text-black px-10 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-orange-600 hover:text-white transition-all transform hover:scale-105 shadow-xl">
+            <Link to="/member/payments" className="w-full md:w-auto bg-white text-black px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] sm:text-xs hover:bg-orange-600 hover:text-white transition-all transform hover:scale-105 shadow-xl text-center">
               {user?.subscription_status === 'active' ? 'Manage Plan' : 'Explore Plans'}
             </Link>
           </div>
