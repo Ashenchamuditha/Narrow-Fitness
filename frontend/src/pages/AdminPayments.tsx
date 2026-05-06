@@ -16,8 +16,15 @@ export default function AdminPayments() {
   const [amountPaid, setAmountPaid] = useState('');
   const [wallQR, setWallQR] = useState('');
 
+  // Duration Stats
+  const [startDate, setStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [visitStats, setVisitStats] = useState({ totalVisitors: 0, paidCount: 0, unpaidCount: 0 });
+  const [isStatsLoading, setIsStatsLoading] = useState(false);
+
   useEffect(() => {
     fetchData();
+    fetchVisitStats();
   }, []);
 
   const fetchData = async () => {
@@ -57,6 +64,18 @@ export default function AdminPayments() {
     }
   };
 
+  const fetchVisitStats = async () => {
+    setIsStatsLoading(true);
+    try {
+      const res = await axios.get(`/api/admin/stats/visits-payments?startDate=${startDate}&endDate=${endDate}`);
+      setVisitStats(res.data);
+    } catch (err) {
+      toast.error("Failed to fetch visit stats");
+    } finally {
+      setIsStatsLoading(false);
+    }
+  };
+
   return (
     <AdminLayout>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10">
@@ -80,6 +99,48 @@ export default function AdminPayments() {
             Wall QR
           </button>
         </div>
+      </div>
+
+      {/* --- VISIT & PAYMENT ANALYTICS --- */}
+      <div className="mb-10 bg-slate-900 rounded-[2.5rem] p-8 text-white relative overflow-hidden group border border-white/5 shadow-2xl">
+         <div className="relative z-10">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8">
+               <div>
+                  <h3 className="text-xl font-black uppercase italic tracking-tighter mb-1">Visit Intelligence</h3>
+                  <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Attendance vs Payment status analysis</p>
+                  
+                  <div className="flex flex-wrap items-center gap-4 mt-6">
+                     <div className="flex flex-col gap-1">
+                        <label className="text-[8px] font-black uppercase text-slate-500 ml-1">From Date</label>
+                        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-xs font-bold focus:ring-2 focus:ring-orange-500 outline-none" />
+                     </div>
+                     <div className="flex flex-col gap-1">
+                        <label className="text-[8px] font-black uppercase text-slate-500 ml-1">To Date</label>
+                        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-xs font-bold focus:ring-2 focus:ring-orange-500 outline-none" />
+                     </div>
+                     <button onClick={fetchVisitStats} disabled={isStatsLoading} className="mt-4 lg:mt-0 bg-orange-600 hover:bg-orange-700 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-orange-600/20 disabled:bg-slate-700">
+                        {isStatsLoading ? 'Analyzing...' : 'Refresh Insights'}
+                     </button>
+                  </div>
+               </div>
+
+               <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 w-full lg:w-auto">
+                  <div className="bg-white/5 border border-white/10 p-5 rounded-3xl backdrop-blur-md min-w-[160px]">
+                     <div className="text-3xl font-black text-white mb-1">{visitStats.totalVisitors}</div>
+                     <div className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Total Visitors</div>
+                  </div>
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 p-5 rounded-3xl backdrop-blur-md min-w-[160px]">
+                     <div className="text-3xl font-black text-emerald-500 mb-1">{visitStats.paidCount}</div>
+                     <div className="text-[8px] font-black text-emerald-400 uppercase tracking-widest">Fully Paid</div>
+                  </div>
+                  <div className="bg-red-500/10 border border-red-500/20 p-5 rounded-3xl backdrop-blur-md min-w-[160px]">
+                     <div className="text-3xl font-black text-red-500 mb-1">{visitStats.unpaidCount}</div>
+                     <div className="text-[8px] font-black text-red-400 uppercase tracking-widest">Unpaid/Pending</div>
+                  </div>
+               </div>
+            </div>
+         </div>
+         <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-orange-600/5 rounded-full blur-3xl" />
       </div>
 
       {wallQR && (

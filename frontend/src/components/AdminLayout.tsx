@@ -49,17 +49,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
     const storedUser = localStorage.getItem('narrow_fitness_user');
     if (storedUser) {
-      const parsedUser = JSON.parse(storedUser);
-      if (parsedUser.role?.toLowerCase() !== 'admin') {
-        navigate('/member');
-      }
-      setUser(parsedUser);
-    } else {
-      navigate('/auth');
+      setUser(JSON.parse(storedUser));
     }
 
     return () => clearInterval(timer); 
-  }, [navigate]);
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('narrow_fitness_token');
@@ -99,6 +93,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     { id: 'trainers', name: 'Trainers', icon: UserPlus, path: '/admin/trainers' },
     { id: 'classes', name: 'Classes', icon: Calendar, path: '/admin/classes' },
     { id: 'attendance', name: 'Attendance', icon: Clock, path: '/admin/attendance' },
+    { id: 'payments', name: 'Payments', icon: CreditCard, path: '/admin/payments' },
     { id: 'pricing', name: 'Pricing', icon: Tag, path: '/admin/pricing' },
     { id: 'inquiries', name: 'Inquiries', icon: MessageSquare, path: '/admin/inquiries' }, 
     { id: 'gallery', name: 'Gallery', icon: ImageIcon, path: '/admin/gallery' },    

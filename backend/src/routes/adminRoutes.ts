@@ -859,4 +859,56 @@ adminRouter.get("/members", async (req, res) => {
   }
 });
 
+// --- NEW STATS ROUTES ---
+
+adminRouter.get("/stats/visits-payments", async (req, res) => {
+  const { startDate, endDate } = req.query;
+  try {
+    // 1. Total unique visitors in period
+    const visitorsRes = await query(`
+      SELECT COUNT(DISTINCT userid) FROM attendance 
+      WHERE attendance_date BETWEEN $1 AND $2
+    `, [startDate, endDate]);
+
+    // 2. Paid vs Unpaid logic
+    // We consider a user "paid" if they have a completed payment within the last 30 days of the end date
+    const paidRes = await query(`
+      SELECT COUNT(DISTINCT userid) FROM payments 
+      WHERE status = 'completed' 
+      AND created_at >= ($1::date - INTERVAL '30 days')
+      AND userid IN (SELECT DISTINCT userid FROM attendance WHERE attendance_date BETWEEN $1 AND $2)
+    `, [endDate, startDate]);
+
+    const totalVisitors = parseInt(visitorsRes.rows[0].count) || 0;
+    const paidCount = parseInt(paidRes.rows[0].count) || 0;
+    const unpaidCount = Math.max(0, totalVisitors - paidCount);
+
+    res.json({
+      totalVisitors,
+      paidCount,
+      unpaidCount
+    });
+  } catch (err: any) {
+    console.error("Visits Stats Error:", err.message);
+    res.status(500).json({ totalVisitors: 0, paidCount: 0, unpaidCount: 0 });
+  }
+});
+
+adminRouter.get("/stats/revenue", async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT SUM(amount_paid) as monthly_revenue 
+      FROM payments 
+      WHERE status = 'completed' 
+      AND created_at >= date_trunc('month', current_date)
+    `);
+    res.json({
+      monthlyRevenue: parseFloat(result.rows[0].monthly_revenue) || 0
+    });
+  } catch (err: any) {
+    console.error("Revenue Stats Error:", err.message);
+    res.status(500).json({ monthlyRevenue: 0 });
+  }
+});
+
 export default adminRouter;

@@ -21,7 +21,8 @@ import {
   CheckCircle2,
   MessageSquare,
   Settings,
-  Clock
+  Clock,
+  CreditCard
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
@@ -34,6 +35,7 @@ export default function AdminDashboard() {
     totalClasses: 0,
     totalPackages: 0 
   });
+  const [monthlyRevenue, setMonthlyRevenue] = useState(0);
   const [recentUsers, setRecentUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
@@ -56,18 +58,6 @@ export default function AdminDashboard() {
 
   // 2. DATA FETCHING
  useEffect(() => {
-  const storedUser = localStorage.getItem('narrow_fitness_user');
-  if (!storedUser) {
-    navigate('/auth');
-    return;
-  }
-
-  const parsedUser = JSON.parse(storedUser);
-  if (parsedUser.role?.toLowerCase() !== 'admin') {
-    navigate('/member');
-    return;
-  }
-
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
@@ -76,6 +66,12 @@ export default function AdminDashboard() {
       if (statsRes.ok) {
         const statsData = await statsRes.json();
         setStats(statsData);
+      }
+
+      const revRes = await fetch(`/api/admin/stats/revenue`);
+      if (revRes.ok) {
+        const revData = await revRes.json();
+        setMonthlyRevenue(revData.monthlyRevenue);
       }
 
       const usersRes = await fetch(`/api/admin/users/recent`);
@@ -238,19 +234,20 @@ export default function AdminDashboard() {
       </motion.div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-10">
         {[
           { label: 'Total Members', value: stats.totalMembers, icon: Users2, color: 'text-blue-600', bg: 'bg-blue-50' },
           { label: 'Active Trainers', value: stats.totalTrainers, icon: Activity, color: 'text-orange-600', bg: 'bg-orange-50' },
           { label: 'Live Classes', value: stats.totalClasses, icon: Calendar, color: 'text-purple-600', bg: 'bg-purple-50' },
           { label: 'Pricing Tiers', value: stats.totalPackages, icon: Tag, color: 'text-green-600', bg: 'bg-green-50' },
+          { label: 'Monthly Revenue', value: `LKR ${monthlyRevenue.toLocaleString()}`, icon: CreditCard, color: 'text-emerald-600', bg: 'bg-emerald-50' },
         ].map((stat) => (
           <div key={stat.label} className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all">
             <div className="flex justify-between items-start mb-4">
               <div className={`w-12 h-12 ${stat.bg} ${stat.color} rounded-2xl flex items-center justify-center shadow-inner`}><stat.icon className="w-6 h-6" /></div>
               <TrendingUp className="w-4 h-4 text-green-500" />
             </div>
-            <div className="text-3xl font-black text-slate-900 mb-1">{stat.value}</div>
+            <div className="text-2xl font-black text-slate-900 mb-1">{stat.value}</div>
             <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{stat.label}</div>
           </div>
         ))}
