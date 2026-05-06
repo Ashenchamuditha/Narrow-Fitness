@@ -132,7 +132,8 @@ export const generateReceiptPDF = async (paymentId: number) => {
 
     // LEFT COL: RECEIPT INFO
     doc.fillColor(ORANGE).font('Helvetica-Bold').fontSize(10).text('TRANSACTION RECEIPT', 50, gridTop);
-    doc.fillColor(BLACK).font('Helvetica-Bold').fontSize(14).text(`#${payment.payhere_payment_id || `NF-CASH-${payment.id}`}`, 50, gridTop + 15);
+    const displayId = (payment.payhere_payment_id || `NF-CASH-${payment.id}`).replace('ORDER_', '');
+    doc.fillColor(BLACK).font('Helvetica-Bold').fontSize(14).text(`#${displayId}`, 50, gridTop + 15);
     
     doc.fillColor(GRAY).font('Helvetica').fontSize(9).text('DATE:', 50, gridTop + 45);
     doc.fillColor(BLACK).font('Helvetica-Bold').text(new Date(payment.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }).toUpperCase(), 100, gridTop + 45);

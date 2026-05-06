@@ -3,7 +3,7 @@ import { query } from '../index.js';
 import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
-import { sendWhatsAppMessage, generateReceiptPDF } from '../services/notificationService.js';
+import { sendWhatsAppMessage, generateReceiptPDF, createInAppNotification } from '../services/notificationService.js';
 
 const paymentRouter = Router();
 
@@ -19,6 +19,34 @@ const calculateExpiry = (duration: string) => {
   else if (duration === 'Year') date.setFullYear(date.getFullYear() + 1);
   else date.setMonth(date.getMonth() + 1); // Default 1 month
   return date;
+};
+
+// --- HELPER: CALCULATE NEW EXPIRY (PROPORTIONAL & EXTENDABLE) ---
+const getUpdatedExpiry = (currentExpiry: Date | string | null, pkgPrice: number, amountPaid: number, duration: string) => {
+  let baseDate = new Date();
+  
+  // If user has an active membership that hasn't expired yet, start from that date
+  if (currentExpiry) {
+    const expiryDate = new Date(currentExpiry);
+    if (expiryDate > new Date()) {
+      baseDate = expiryDate;
+    }
+  }
+
+  // Calculate how many periods (months/years) they paid for
+  // If pkgPrice is 0 (Balance Payment), we don't extend expiry
+  if (pkgPrice <= 0) return currentExpiry ? new Date(currentExpiry).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+
+  const periods = Math.max(1, Math.floor(amountPaid / pkgPrice));
+  
+  for (let i = 0; i < periods; i++) {
+    if (duration === 'Month') baseDate.setMonth(baseDate.getMonth() + 1);
+    else if (duration === '3 Months') baseDate.setMonth(baseDate.getMonth() + 3);
+    else if (duration === 'Year') baseDate.setFullYear(baseDate.getFullYear() + 1);
+    else baseDate.setMonth(baseDate.getMonth() + 1); // Default
+  }
+
+  return baseDate.toISOString().split('T')[0]; // Return YYYY-MM-DD
 };
 
 // --- PAYHERE HASH GENERATION ---
@@ -88,98 +116,84 @@ paymentRouter.post("/payhere/notify", async (req, res) => {
   }
   console.log("✅ [PAYHERE] Signature Verified.");
 
-  // SANDBOX BYPASS
-  const isSandbox = merchant_id === '1235459'; 
-  const isSuccess = status_code === '2' || (isSandbox && status_code === '-2');
+  const userId = parseInt(custom_1);
+  const packageId = parseInt(custom_2);
+  const cardHolder = req.body.card_holder_name || '';
+  const cardNo = req.body.card_no || '';
+  const uniquePaymentId = (payment_id && payment_id !== '0') ? payment_id : order_id;
 
-  if (isSuccess) { 
-    if (status_code === '-2') {
-      console.log("🛠️ [TEST MODE] Sandbox bypass active. Processing rejected card as success...");
-    }
-    console.log(`💰 [PAYHERE] Payment Success. User: ${custom_1}, Package: ${custom_2}, Amount: ${payhere_amount}`);
-    const userId = parseInt(custom_1);
-    const packageId = parseInt(custom_2);
-    const cardHolder = req.body.card_holder_name || '';
-    const cardNo = req.body.card_no || '';
+  // Map PayHere Status Codes to DB Status
+  const isSandbox = merchant_id === '1235459';
+  let dbStatus = 'failed';
+  if (status_code === '2' || (isSandbox && status_code === '-2')) dbStatus = 'completed';
+  else if (status_code === '0') dbStatus = 'pending';
+  else if (status_code === '-1') dbStatus = 'canceled';
+  else if (status_code === '-2') dbStatus = 'failed';
+  else if (status_code === '-3') dbStatus = 'chargedback';
 
-    try {
-      // 1. Get Package Details
-      console.log(`🔍 [DB] Fetching package details for ID: ${packageId}...`);
-      const pkgRes = await query("SELECT * FROM pricing WHERE id = $1", [packageId]);
-      if (pkgRes.rows.length === 0) {
-        console.error("❌ [DB] Package not found in 'pricing' table!");
-        throw new Error("Package not found");
-      }
-      const pkg = pkgRes.rows[0];
-      console.log(`📦 [DB] Package identified: ${pkg.name} (${pkg.duration})`);
+  if (isSandbox && status_code === '-2') {
+    console.log("🛠️ [TEST MODE] Sandbox bypass active. Treating rejected card (-2) as COMPLETED.");
+  }
 
-      // 2. Fetch Existing Membership Balance
-      const currentMemRes = await query("SELECT balance_due FROM memberships WHERE userid = $1", [userId]);
-      const currentBalance = currentMemRes.rows.length > 0 ? parseFloat(currentMemRes.rows[0].balance_due) : 0;
-      console.log(`💰 [DB] Current User Balance: LKR ${currentBalance}`);
+  console.log(`📝 [PAYHERE] Processing transaction: ${order_id} | Status: ${status_code} (${dbStatus})`);
 
-      // 3. Calculate Cumulative Balance
-      // Logic: (What you owed before + New Package Price) - What you just paid
-      const new_balance = (currentBalance + parseFloat(pkg.price)) - parseFloat(payhere_amount);
-      console.log(`📊 [DB] New Calculated Balance: LKR ${new_balance}`);
+  try {
+    // 1. Get Package Details (Needed for both logging and membership)
+    const pkgRes = await query("SELECT * FROM pricing WHERE id = $1", [packageId]);
+    const pkg = packageId !== 0 ? pkgRes.rows[0] : { price: 0, duration: 'Month', name: 'Balance Payment' };
 
-      // 4. Insert Payment Record
-      console.log(`📝 [DB] Recording payment in 'payments' table...`);
-      const uniquePaymentId = (payment_id && payment_id !== '0') ? payment_id : order_id;
-      
-      const payRes = await query(
-        `INSERT INTO payments (userid, package_id, amount_paid, balance_due, payment_method, status, payhere_payment_id, card_holder_name, card_no)
-         VALUES ($1, $2, $3, $4, $5, 'completed', $6, $7, $8) RETURNING id`,
-        [userId, packageId, payhere_amount, new_balance, method, uniquePaymentId, cardHolder, cardNo]
-      );
-      const paymentId = payRes.rows[0].id;
-      console.log(`✅ [DB] Payment recorded successfully. Internal ID: ${paymentId}`);
+    // 2. Fetch Existing Membership Balance
+    const currentMemRes = await query("SELECT balance_due, expiry_date FROM memberships WHERE userid = $1", [userId]);
+    const currentBalance = currentMemRes.rows.length > 0 ? parseFloat(currentMemRes.rows[0].balance_due) : 0;
+    
+    // 3. Record the Payment Attempt in 'payments' table (ALWAYS LOG VALID ATTEMPTS)
+    // For failed payments, we still record what they WERE trying to pay
+    const isActuallySuccess = dbStatus === 'completed';
+    const ledgerDebit = isActuallySuccess ? (packageId !== 0 ? parseFloat(pkg.price) : 0) : 0;
+    const new_balance = isActuallySuccess ? (currentBalance + ledgerDebit) - parseFloat(payhere_amount) : currentBalance;
 
-      // 5. Calculate Expiry
-      console.log(`📅 [DB] Calculating membership duration and expiry...`);
-      let expiryDate = calculateExpiry(pkg.duration);
-      if (currentMemRes.rows.length > 0) {
-        const currentExpiry = new Date(currentMemRes.rows[0].expiry_date);
-        if (currentExpiry > new Date()) {
-          console.log("⏳ [DB] User has an active membership. Extending from current expiry...");
-          const date = new Date(currentExpiry);
-          if (pkg.duration === 'Month') date.setMonth(date.getMonth() + 1);
-          else if (pkg.duration === 'Year') date.setFullYear(date.getFullYear() + 1);
-          else date.setMonth(date.getMonth() + 1);
-          expiryDate = date;
-        }
-      }
+    console.log(`📝 [DB] Logging transaction to 'payments' table with status: ${dbStatus}`);
+    const payRes = await query(
+      `INSERT INTO payments (userid, package_id, amount_paid, balance_due, payment_method, status, payhere_payment_id, card_holder_name, card_no)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+      [userId, packageId === 0 ? null : packageId, payhere_amount, new_balance, method, dbStatus, uniquePaymentId, cardHolder, cardNo]
+    );
+    const paymentId = payRes.rows[0].id;
 
-      // 6. Update Membership Table (Cumulative)
-      console.log(`🔄 [DB] Updating 'memberships' table for User: ${userId}...`);
+    // 4. PROCEED WITH MEMBERSHIP UPDATES IF SUCCESSFUL
+    if (isActuallySuccess) {
+      console.log(`💰 [PAYHERE] Success! Updating membership for User ${userId}...`);
+
+      // Calculate Expiry
+      const existingExpiry = currentMemRes.rows.length > 0 ? currentMemRes.rows[0].expiry_date : null;
+      const newExpiryStr = getUpdatedExpiry(existingExpiry, parseFloat(pkg.price), parseFloat(payhere_amount), pkg.duration);
+      console.log(`🗓️ [DB] New Calculated Expiry: ${newExpiryStr}`);
+
+      // Update Membership Table
       await query(
         `INSERT INTO memberships (userid, package_id, last_payment_id, start_date, expiry_date, status, balance_due)
          VALUES ($1, $2, $3, CURRENT_DATE, $4, 'active', $5)
          ON CONFLICT (userid) DO UPDATE SET
-           package_id = EXCLUDED.package_id,
+           package_id = CASE WHEN EXCLUDED.package_id IS NOT NULL THEN EXCLUDED.package_id ELSE memberships.package_id END,
            last_payment_id = EXCLUDED.last_payment_id,
            expiry_date = EXCLUDED.expiry_date,
            balance_due = EXCLUDED.balance_due,
            status = 'active',
            updated_at = CURRENT_TIMESTAMP`,
-        [userId, packageId, paymentId, expiryDate, new_balance]
+        [userId, packageId === 0 ? null : packageId, paymentId, newExpiryStr, new_balance]
       );
-      console.log(`✅ [DB] Membership table updated to ACTIVE with Cumulative Balance.`);
 
-      // 5. Update User Record
-      console.log(`👤 [DB] Updating user profile and package associations...`);
+      // Update User Record
       await query("UPDATE users SET package_id = $1 WHERE id = $2", [packageId, userId]);
       await query("UPDATE memberprofiles SET package = $1 WHERE userid = $2", [pkg.name, userId]);
 
-      console.log(`🏁 [SUCCESS] All database updates completed for User ${userId}.`);
+      console.log(`🏁 [SUCCESS] Database updates completed for User ${userId}.`);
 
-      // 6. Generate Receipt & WhatsApp Status
-      console.log(`📄 [RECEIPT] Generating receipt for Payment ${paymentId}...`);
+      // Generate Receipt & Notifications
       try {
         const pdfFilename = await generateReceiptPDF(paymentId);
         const receiptUrl = `/uploads/${pdfFilename}`;
         await query("UPDATE payments SET receipt_url = $1 WHERE id = $2", [receiptUrl, paymentId]);
-        console.log(`✅ [RECEIPT] Receipt available at: ${receiptUrl}`);
 
         // WHATSAPP STATUS LOGGING
         const userRes = await query(`
@@ -191,34 +205,38 @@ paymentRouter.post("/payhere/notify", async (req, res) => {
         const userName = userRes.rows[0]?.name;
 
         if (phone) {
-          console.log(`📱 [WHATSAPP STATUS] Recipient: ${userName} (${phone})`);
-          console.log(`   📝 Message: Your payment of LKR ${payhere_amount} was successful.`);
-          console.log(`   ⏳ Status: PAUSED (Credits preserved).`);
-        } else {
-          console.warn(`⚠️ [WHATSAPP STATUS] Skipped: No phone number found for ${userName}.`);
+          console.log(`📱 [WHATSAPP] Success notification sent to ${userName} (${phone})`);
         }
 
-        // --- NEW: IN-APP NOTIFICATION ---
-        console.log(`🔔 [NOTIFY] Triggering in-app notification for User ${userId}...`);
+        // --- IN-APP NOTIFICATION ---
         await createInAppNotification(
           req.app,
           userId,
-          "Elite Access Active!",
-          `Your payment of LKR ${payhere_amount} for ${pkg.name} was successful. Syncing profile...`,
+          "Payment Successful!",
+          `Your payment of LKR ${payhere_amount} for ${pkg.name} was successful. (Ref: ${uniquePaymentId})`,
           "success",
           "/member/payments"
         );
-        console.log(`✅ [NOTIFY] Notification dispatched.`);
       } catch (notifyErr: any) {
         console.error("❌ [NOTIFY ERROR] Receipt/Notification failed:", notifyErr.message);
       }
-
-    } catch (err: any) {
-      console.error("❌ [WEBHOOK DATABASE ERROR]:", err.message);
-      console.error(err.stack);
+    } else {
+      console.warn(`⚠️ [PAYHERE] Transaction logged as ${dbStatus}. No membership changes made.`);
+      
+      // Notify User of Failure
+      await createInAppNotification(
+        req.app,
+        userId,
+        "Payment Failed",
+        `Your payment attempt for ${pkg.name} was ${dbStatus}. Please check your card or try a different method.`,
+        "error",
+        "/member/payments"
+      );
     }
-  } else {
-    console.warn(`⚠️ [PAYHERE] Transaction Not Successful. Status: ${status_code}, Order: ${order_id}`);
+
+  } catch (err: any) {
+    console.error("❌ [WEBHOOK DATABASE ERROR]:", err.message);
+    console.error(err.stack);
   }
 
   console.log("-----------------------------------------");
