@@ -244,9 +244,10 @@ export default function AdminMembers() {
         </div>
       )}
 
-      {/* Members Table */}
+      {/* Members List */}
       <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Desktop Table View */}
+        <div className="hidden lg:block overflow-x-auto">
           <table className="w-full text-left">
             <thead>
               <tr className="bg-gray-50/50">
@@ -312,6 +313,62 @@ export default function AdminMembers() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Card View */}
+        <div className="lg:hidden divide-y divide-gray-50">
+          {loading ? (
+            <div className="px-6 py-10 text-center text-xs font-bold text-gray-400 uppercase tracking-widest">Loading members...</div>
+          ) : orderedMembers.length === 0 ? (
+            <div className="px-6 py-10 text-center text-xs font-bold text-gray-400 uppercase tracking-widest">No members found.</div>
+          ) : (
+            orderedMembers.map((member, index) => (
+              <div key={member.id} className="p-6 hover:bg-gray-50/50 transition-colors">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-2xl bg-orange-100 flex items-center justify-center text-sm font-black text-orange-600 uppercase">
+                      {member.name ? member.name.charAt(0) : '?'}
+                    </div>
+                    <div>
+                      <div className="text-sm font-black text-black uppercase tracking-tight">{member.name}</div>
+                      <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{member.role}</div>
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <button 
+                      data-menu-button
+                      onClick={() => setOpenMenuId(openMenuId === member.id ? null : member.id)}
+                      className="p-2 text-gray-400 hover:text-black transition-colors"
+                    >
+                      <MoreVertical className="w-5 h-5" />
+                    </button>
+                    {openMenuId === member.id && (
+                      <div data-menu-content className="absolute right-0 mt-2 w-40 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
+                        <button onClick={() => handleEditClick(member)} className="w-full text-left px-4 py-3 text-xs font-black uppercase tracking-widest text-gray-700 hover:bg-gray-50 flex items-center gap-2 border-b border-gray-100">
+                          <Edit2 className="w-4 h-4" /> Edit
+                        </button>
+                        <button onClick={() => handleDeleteClick(member)} className="w-full text-left px-4 py-3 text-xs font-black uppercase tracking-widest text-red-600 hover:bg-red-50 flex items-center gap-2">
+                          <Trash2 className="w-4 h-4" /> Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Email</span>
+                    <span className="text-[10px] font-bold text-gray-600">{member.email}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Joined</span>
+                    <span className="text-[10px] font-bold text-gray-600">
+                      {member.created_at ? new Date(member.created_at).toLocaleDateString() : 'N/A'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import AdminLayout from '../components/AdminLayout';
-import { CreditCard, Search, Filter, Download, Plus, QrCode, CheckCircle, XCircle, Scan, X, Loader2, AlertCircle } from 'lucide-react';
+import { CreditCard, Search, Filter, Download, Plus, QrCode, CheckCircle, XCircle, Scan, X, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
 import { recordCashPayment } from '../services/paymentService';
@@ -235,23 +235,32 @@ export default function AdminPayments() {
       {/* --- VISIT & PAYMENT ANALYTICS --- */}
       <div className="mb-10 bg-slate-900 rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 text-white relative overflow-hidden group border border-white/5 shadow-2xl">
          <div className="relative z-10">
-            <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-8">
-               <div className="flex-1">
+            <div className="flex justify-between items-start mb-8">
+               <div>
                   <h3 className="text-xl font-black uppercase italic tracking-tighter mb-1">Visit Intelligence</h3>
                   <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Attendance vs Payment status</p>
-                  
-                  <div className="flex flex-wrap items-end gap-3 sm:gap-4 mt-6">
-                     <div className="flex-1 min-w-[120px] flex flex-col gap-1">
-                        <label className="text-[8px] font-black uppercase text-slate-500 ml-1">From</label>
-                        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-[10px] sm:text-xs font-bold focus:ring-2 focus:ring-orange-500 outline-none" />
+               </div>
+               <button 
+                  onClick={fetchVisitStats} 
+                  disabled={isStatsLoading} 
+                  className="p-3.5 bg-white/5 border border-white/10 rounded-2xl text-orange-500 hover:bg-orange-600 hover:text-white transition-all shadow-sm group active:scale-95"
+                  title="Refresh Intelligence"
+               >
+                  <RefreshCw className={`w-5 h-5 ${isStatsLoading ? 'animate-spin' : ''}`} />
+               </button>
+            </div>
+
+            <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-8">
+               <div className="flex-1">
+                  <div className="grid grid-cols-2 gap-3 sm:gap-4 max-w-sm">
+                     <div className="flex flex-col gap-1.5">
+                        <label className="text-[8px] font-black uppercase text-slate-500 ml-1">Range From</label>
+                        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-[10px] sm:text-xs font-bold focus:ring-2 focus:ring-orange-500 outline-none transition-all" />
                      </div>
-                     <div className="flex-1 min-w-[120px] flex flex-col gap-1">
-                        <label className="text-[8px] font-black uppercase text-slate-500 ml-1">To</label>
-                        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-[10px] sm:text-xs font-bold focus:ring-2 focus:ring-orange-500 outline-none" />
+                     <div className="flex flex-col gap-1.5">
+                        <label className="text-[8px] font-black uppercase text-slate-500 ml-1">Range To</label>
+                        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-[10px] sm:text-xs font-bold focus:ring-2 focus:ring-orange-500 outline-none transition-all" />
                      </div>
-                     <button onClick={fetchVisitStats} disabled={isStatsLoading} className="h-[38px] sm:h-auto bg-orange-600 hover:bg-orange-700 px-5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all shadow-lg shadow-orange-600/20 disabled:bg-slate-700">
-                        {isStatsLoading ? '...' : 'Refresh'}
-                     </button>
                   </div>
                </div>
 

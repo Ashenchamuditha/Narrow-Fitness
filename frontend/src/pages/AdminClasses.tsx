@@ -218,45 +218,86 @@ export default function AdminClasses() {
       </div>
 
       <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
-        <table className="w-full text-left">
-          <thead>
-            <tr className="bg-slate-50/50 border-b border-slate-100">
-              <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
-              <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Session / Coach</th>
-              <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Slots</th>
-              <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-50">
-            {loading ? (
-              <tr><td colSpan={4} className="py-20 text-center"><Loader2 className="animate-spin mx-auto text-orange-500" /></td></tr>
-            ) : filteredClasses.map((cls) => {
-              const status = calculateStatus(cls.class_day, cls.class_time, cls.is_cancelled);
-              return (
-                <tr key={cls.id} className={`hover:bg-slate-50/30 transition-colors group ${cls.is_cancelled || status.label === 'Expired' ? 'bg-slate-50/50' : ''}`}>
-                  <td className="px-8 py-6">
-                    <span className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-black uppercase border w-fit ${status.color}`}>
+        {/* Desktop View Table */}
+        <div className="hidden lg:block overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-slate-50/50 border-b border-slate-100">
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Session / Coach</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Slots</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {loading ? (
+                <tr><td colSpan={4} className="py-20 text-center"><Loader2 className="animate-spin mx-auto text-orange-500" /></td></tr>
+              ) : filteredClasses.map((cls) => {
+                const status = calculateStatus(cls.class_day, cls.class_time, cls.is_cancelled);
+                return (
+                  <tr key={cls.id} className={`hover:bg-slate-50/30 transition-colors group ${cls.is_cancelled || status.label === 'Expired' ? 'bg-slate-50/50' : ''}`}>
+                    <td className="px-8 py-6">
+                      <span className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-black uppercase border w-fit ${status.color}`}>
+                        <status.icon className="w-3 h-3" /> {status.label}
+                      </span>
+                    </td>
+                    <td className="px-8 py-6">
+                      <div className={`text-sm font-black uppercase italic ${cls.is_cancelled || status.label === 'Expired' ? 'line-through text-slate-400' : 'text-slate-900'}`}>{cls.name}</div>
+                      <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{cls.trainer_name}</div>
+                    </td>
+                    <td className="px-8 py-6 font-bold text-slate-700 text-sm">{cls.capacity} Available</td>
+                    <td className="px-8 py-6 text-right">
+                      <div className="flex justify-end gap-2">
+                        <button onClick={() => handleOpenBookings(cls)} className="relative p-2.5 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all"><Users className="w-4.5 h-4.5" />{cls.pending_count > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[8px] font-black rounded-full flex items-center justify-center border-2 border-white">{cls.pending_count}</span>}</button>
+                        <button onClick={() => handleCancelToggle(cls)} className={`p-2.5 rounded-xl border transition-all ${cls.is_cancelled ? 'bg-green-50 text-green-600 border-green-200' : 'bg-red-50 text-red-600 border-red-100 hover:bg-red-500 hover:text-white'}`}>{cls.is_cancelled ? <CheckCircle2 className="w-4.5 h-4.5" /> : <Ban className="w-4.5 h-4.5" />}</button>
+                        <button onClick={() => {setEditingClass(cls); setFormData(cls); setIsModalOpen(true);}} className="p-2.5 bg-slate-100 text-slate-400 rounded-xl hover:text-black transition-all"><Edit2 className="w-4.5 h-4.5" /></button>
+                        <button onClick={() => handleDeleteClass(cls.id)} className="p-2.5 bg-slate-100 text-slate-400 rounded-xl hover:bg-red-500 hover:text-white transition-all"><Trash2 className="w-4.5 h-4.5" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile View Cards */}
+        <div className="lg:hidden divide-y divide-slate-50">
+          {loading ? (
+            <div className="py-20 text-center"><Loader2 className="animate-spin mx-auto text-orange-500" /></div>
+          ) : filteredClasses.map((cls) => {
+            const status = calculateStatus(cls.class_day, cls.class_time, cls.is_cancelled);
+            return (
+              <div key={cls.id} className={`p-6 hover:bg-slate-50/30 transition-colors ${cls.is_cancelled || status.label === 'Expired' ? 'bg-slate-50/50' : ''}`}>
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <span className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-black uppercase border w-fit mb-3 ${status.color}`}>
                       <status.icon className="w-3 h-3" /> {status.label}
                     </span>
-                  </td>
-                  <td className="px-8 py-6">
                     <div className={`text-sm font-black uppercase italic ${cls.is_cancelled || status.label === 'Expired' ? 'line-through text-slate-400' : 'text-slate-900'}`}>{cls.name}</div>
                     <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{cls.trainer_name}</div>
-                  </td>
-                  <td className="px-8 py-6 font-bold text-slate-700 text-sm">{cls.capacity} Available</td>
-                  <td className="px-8 py-6 text-right">
-                    <div className="flex justify-end gap-2">
-                      <button onClick={() => handleOpenBookings(cls)} className="relative p-2.5 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all"><Users className="w-4.5 h-4.5" />{cls.pending_count > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[8px] font-black rounded-full flex items-center justify-center border-2 border-white">{cls.pending_count}</span>}</button>
-                      <button onClick={() => handleCancelToggle(cls)} className={`p-2.5 rounded-xl border transition-all ${cls.is_cancelled ? 'bg-green-50 text-green-600 border-green-200' : 'bg-red-50 text-red-600 border-red-100 hover:bg-red-500 hover:text-white'}`}>{cls.is_cancelled ? <CheckCircle2 className="w-4.5 h-4.5" /> : <Ban className="w-4.5 h-4.5" />}</button>
-                      <button onClick={() => {setEditingClass(cls); setFormData(cls); setIsModalOpen(true);}} className="p-2.5 bg-slate-100 text-slate-400 rounded-xl hover:text-black transition-all"><Edit2 className="w-4.5 h-4.5" /></button>
-                      <button onClick={() => handleDeleteClass(cls.id)} className="p-2.5 bg-slate-100 text-slate-400 rounded-xl hover:bg-red-500 hover:text-white transition-all"><Trash2 className="w-4.5 h-4.5" /></button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <button onClick={() => handleOpenBookings(cls)} className="relative p-2.5 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all">
+                      <Users className="w-4.5 h-4.5" />
+                      {cls.pending_count > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[8px] font-black rounded-full flex items-center justify-center border-2 border-white">{cls.pending_count}</span>}
+                    </button>
+                    <button onClick={() => handleCancelToggle(cls)} className={`p-2.5 rounded-xl border transition-all ${cls.is_cancelled ? 'bg-green-50 text-green-600 border-green-200' : 'bg-red-50 text-red-600 border-red-100 hover:bg-red-500 hover:text-white'}`}>
+                      {cls.is_cancelled ? <CheckCircle2 className="w-4.5 h-4.5" /> : <Ban className="w-4.5 h-4.5" />}
+                    </button>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center pt-4 border-t border-slate-50">
+                  <div className="font-bold text-slate-700 text-xs">{cls.capacity} Available Slots</div>
+                  <div className="flex gap-2">
+                    <button onClick={() => {setEditingClass(cls); setFormData(cls); setIsModalOpen(true);}} className="p-2.5 bg-slate-100 text-slate-400 rounded-xl hover:text-black transition-all"><Edit2 className="w-4.5 h-4.5" /></button>
+                    <button onClick={() => handleDeleteClass(cls.id)} className="p-2.5 bg-slate-100 text-slate-400 rounded-xl hover:bg-red-500 hover:text-white transition-all"><Trash2 className="w-4.5 h-4.5" /></button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       <AnimatePresence>

@@ -205,9 +205,14 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
       {/* Main Content Area */}
       <div className="flex-1 lg:ml-64 min-h-screen flex flex-col">
-        <header className="bg-white border-b border-gray-100 sticky top-0 z-10 px-4 lg:px-8 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <button onClick={() => setIsMobileMenuOpen(true)} className="lg:hidden text-gray-500"><Menu className="w-6 h-6" /></button>
+        <header className="bg-white border-b border-gray-100 sticky top-0 z-10 px-4 lg:px-8 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-4 sm:gap-6">
+            <button 
+              onClick={() => setIsMobileMenuOpen(true)} 
+              className="lg:hidden p-2 bg-slate-50 text-slate-900 rounded-xl hover:bg-orange-50 hover:text-orange-600 transition-all border border-slate-100 shadow-sm"
+            >
+              <Menu className="w-5 h-5 sm:w-6 sm:h-6" />
+            </button>
             <div className="hidden sm:flex flex-col">
                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">
                   <span>Narrow Fitness</span>
@@ -219,28 +224,32 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                   {formattedDate} | {formattedTime}
                </div>
             </div>
+            {/* Show page title on mobile instead of breadcrumbs */}
+            <div className="sm:hidden">
+              <h2 className="text-sm font-black uppercase italic tracking-tighter text-black">{activePage}</h2>
+            </div>
           </div>
 
-          <div className="flex items-center gap-4 lg:gap-8">
+          <div className="flex items-center gap-2 sm:gap-4 lg:gap-8">
             <button 
               onClick={() => setIsBroadcastModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-orange-50 text-orange-600 rounded-xl border border-orange-100 hover:bg-orange-600 hover:text-white transition-all shadow-sm group"
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-orange-50 text-orange-600 rounded-xl border border-orange-100 hover:bg-orange-600 hover:text-white transition-all shadow-sm group"
             >
               <Mail className="w-4 h-4 group-hover:scale-110 transition-transform" />
-              <span className="text-[9px] font-black uppercase tracking-widest hidden sm:block">Notify Members</span>
+              <span className="text-[9px] font-black uppercase tracking-widest hidden sm:block">Notify</span>
             </button>
 
-            <button className="relative text-gray-400 hover:text-orange-600 transition-colors">
-              <Bell className="w-6 h-6" />
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-orange-500 rounded-full border-2 border-white text-[8px] text-white flex items-center justify-center font-black">3</span>
+            <button className="relative text-gray-400 hover:text-orange-600 transition-colors hidden xs:block">
+              <Bell className="w-5 h-5 sm:w-6 sm:h-6" />
+              <span className="absolute -top-1 -right-1 w-3.5 h-3.5 sm:w-4 sm:h-4 bg-orange-500 rounded-full border-2 border-white text-[7px] sm:text-[8px] text-white flex items-center justify-center font-black">3</span>
             </button>
 
-            <div className="flex items-center gap-3 pl-4 border-l border-gray-100">
-              <div className="text-right hidden sm:block">
+            <div className="flex items-center gap-2 sm:gap-3 sm:pl-4 sm:border-l border-gray-100">
+              <div className="text-right hidden md:block">
                 <div className="text-sm font-black text-black uppercase tracking-tight leading-none mb-1">{user?.name || 'Admin'}</div>
                 <div className="text-[9px] font-black text-orange-500 uppercase tracking-widest">Master Controller</div>
               </div>
-              <div className="w-10 h-10 rounded-2xl bg-slate-900 flex items-center justify-center border-2 border-orange-500 shadow-lg font-black text-orange-500 italic text-xs">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-slate-900 flex items-center justify-center border-2 border-orange-500 shadow-lg font-black text-orange-500 italic text-[10px] sm:text-xs">
                 {user?.name ? user.name.split(' ').map((n: any) => n[0]).join('') : 'A'}
               </div>
             </div>
