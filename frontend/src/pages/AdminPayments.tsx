@@ -286,7 +286,7 @@ export default function AdminPayments() {
       {/* --- DRILL DOWN MODAL --- */}
       <AnimatePresence>
         {drillDown && (
-          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white rounded-[2rem] sm:rounded-[2.5rem] w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
               <div className="p-6 sm:p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50">
                 <div>
@@ -325,19 +325,25 @@ export default function AdminPayments() {
       {/* WALL QR MODAL */}
       <AnimatePresence>
         {showWallQRModal && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative bg-white rounded-[2rem] sm:rounded-[3rem] p-6 sm:p-10 w-full max-w-md shadow-2xl border border-gray-100 flex flex-col items-center text-center max-h-[95vh] overflow-y-auto no-scrollbar">
-              <button onClick={() => setShowWallQRModal(false)} className="absolute top-6 right-6 p-2 hover:bg-slate-50 rounded-full text-slate-400 transition-all"><X className="w-5 h-5 sm:w-6 sm:h-6" /></button>
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm print:bg-white print:p-0">
+            <motion.div 
+              id="printable-qr"
+              initial={{ scale: 0.9, opacity: 0 }} 
+              animate={{ scale: 1, opacity: 1 }} 
+              exit={{ scale: 0.9, opacity: 0 }} 
+              className="relative bg-white rounded-[2rem] sm:rounded-[3rem] p-6 sm:p-10 w-full max-w-md shadow-2xl border border-gray-100 flex flex-col items-center text-center max-h-[95vh] overflow-y-auto no-scrollbar print:max-h-none print:overflow-visible print:shadow-none print:border-none print:rounded-none print:w-full print:p-20"
+            >
+              <button onClick={() => setShowWallQRModal(false)} className="absolute top-6 right-6 p-2 hover:bg-slate-50 rounded-full text-slate-400 transition-all no-print"><X className="w-5 h-5 sm:w-6 sm:h-6" /></button>
               
               <div className="mb-6 sm:mb-8">
-                <div className="w-12 h-12 sm:w-16 sm:h-16 bg-orange-100 rounded-[1.2rem] sm:rounded-[1.5rem] flex items-center justify-center mx-auto mb-4 text-orange-600 shadow-inner">
+                <div className="w-12 h-12 sm:w-16 sm:h-16 bg-orange-100 rounded-[1.2rem] sm:rounded-[1.5rem] flex items-center justify-center mx-auto mb-4 text-orange-600 shadow-inner print:bg-transparent print:shadow-none">
                   <QrCode className="w-6 h-6 sm:w-8 sm:h-8" />
                 </div>
                 <h3 className="text-2xl sm:text-3xl font-black text-black uppercase italic tracking-tighter">Wall <span className="text-orange-600">Payment QR</span></h3>
                 <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">Display at Gym Entrance</p>
               </div>
 
-              <div className="p-4 sm:p-8 bg-slate-50 rounded-[1.5rem] sm:rounded-[2.5rem] border-4 border-black mb-6 sm:mb-8 flex items-center justify-center group relative overflow-hidden">
+              <div className="p-4 sm:p-8 bg-slate-50 rounded-[1.5rem] sm:rounded-[2.5rem] border-4 border-black mb-6 sm:mb-8 flex items-center justify-center group relative overflow-hidden print:bg-white print:border-8">
                 <img src={wallQR} alt="Wall QR" className="w-48 h-48 sm:w-64 sm:h-64 rounded-xl relative z-10" />
               </div>
 
@@ -354,10 +360,12 @@ export default function AdminPayments() {
 
               <button 
                 onClick={() => window.print()} 
-                className="w-full bg-black text-white py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] sm:text-xs hover:bg-orange-600 transition-all shadow-xl shadow-black/10 flex items-center justify-center gap-2"
+                className="w-full bg-black text-white py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] sm:text-xs hover:bg-orange-600 transition-all shadow-xl shadow-black/10 flex items-center justify-center gap-2 no-print"
               >
                 <Download className="w-4 h-4" /> Print Station QR
               </button>
+              
+              <p className="hidden print:block mt-20 text-[10px] font-black text-slate-300 uppercase tracking-[0.3em]">Narrow Fitness Management System</p>
             </motion.div>
           </div>
         )}
@@ -507,6 +515,29 @@ export default function AdminPayments() {
       <style>{`
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          #printable-qr, #printable-qr * {
+            visibility: visible;
+          }
+          #printable-qr {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+        }
       `}</style>
     </AdminLayout>
   );
