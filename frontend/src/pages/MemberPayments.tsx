@@ -437,8 +437,7 @@ export default function MemberPayments() {
                              </div>
                              <div className="p-2 border-t sm:border-t-0 border-l border-white/5 lg:border-l-0">
                                <div className="text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">Expiry</div>
-                               <div className="text-sm sm:text-lg font-black text-white italic truncate">{new Date(membership.expiry_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).toUpperCase()}</div>
-                             </div>
+                               <div className="text-sm sm:text-lg font-black text-white italic truncate">{new Date(membership.expiry_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase()}</div>                             </div>
                           </div>
                         )}
                       </div>

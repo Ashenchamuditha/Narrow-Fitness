@@ -359,7 +359,7 @@ export default function MemberDashboard() {
                 <p className={`text-[10px] font-bold uppercase tracking-widest text-yellow-700 opacity-80 mt-1`}>
                   {graceInfo.isLastDay 
                     ? 'Your session will be BLOCKED today. Pay immediately to keep access.' 
-                    : `Your access expired on ${new Date(membership.expiry_date).toLocaleDateString()}. Grace period active.`}
+                    : `Your access expired on ${new Date(membership.expiry_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}. Grace period active.`}
                 </p>
               </div>
             </div>
@@ -588,7 +588,7 @@ export default function MemberDashboard() {
                 {membership && (
                   <div className="mt-3 flex flex-wrap items-center justify-center sm:justify-start gap-x-4 gap-y-2">
                     <p className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                      Expires: <span className="text-white">{new Date(membership.expiry_date).toLocaleDateString()}</span>
+                      Expires: <span className="text-white">{new Date(membership.expiry_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                     </p>
                     {membership.balance_due > 0 && (
                       <p className="text-[8px] sm:text-[9px] font-bold text-red-400 uppercase tracking-widest animate-pulse">
