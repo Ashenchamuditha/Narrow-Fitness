@@ -5,9 +5,9 @@
 ---
 
 ## 📋 Project Overview
-Engineered a complete **gym management system** with AI-powered assistance, enabling seamless member enrollment, class scheduling, payment processing, and personalized fitness guidance—all from a single integrated platform.
+Engineered a complete **gym management system** with AI-powered assistance, enabling seamless member enrollment, class scheduling, automated payment processing with SMS/Email notifications, and personalized fitness guidance—all from a single integrated platform.
 
-**Tech Stack:** TypeScript | React 19 | Express.js | PostgreSQL (Neon Cloud) | Groq AI (Llama 3.3) | Socket.io | JWT | Tailwind CSS
+**Tech Stack:** TypeScript | React 19 | Express.js | PostgreSQL (Neon Cloud) | Groq AI (Llama 3.3) | Socket.io | JWT | Tailwind CSS | Nodemailer | SMS Integration
 
 ---
 
@@ -42,24 +42,38 @@ Engineered a complete **gym management system** with AI-powered assistance, enab
 
 ### 💳 Payment & Subscription System (Solo Development)
 - Developed **pricing tier system** with package selection (Basic/Pro/Premium)
-- Built **payment tracking dashboard** with transaction history
-- Implemented subscription status management and renewal logic
-- Created package upgrade/downgrade functionality
-- Added payment analytics for admin insights
+- Built **payment tracking dashboard** with transaction history and status indicators
+- Implemented **subscription status management** with renewal logic and expiration tracking
+- Created **automated payment reminder system** via SMS & Email notifications (Nodemailer + SMS Gateway)
+- Built **payment blocking system** to restrict access for unpaid members:
+  - Automated access denial to classes, workouts, and AI assistant for overdue payments
+  - Real-time payment status validation on every feature access
+  - Grace period configuration by admins
+- Designed **payment date update system** with automatic renewal date calculation
+- Implemented **pending payment notifications** sent 7 days before expiration
+- Created **payment failure handling** with retry logic and fallback notifications
+- Added package upgrade/downgrade functionality with pro-rata adjustments
+- Built **payment analytics dashboard** for admin revenue insights and member payment trends
 
 ### 📡 Real-Time Communication (Solo Development)
 - Implemented **Socket.io WebSocket server** for live class notifications
 - Built real-time **AI chat synchronization** across browser tabs
 - Created live member count updates in admin dashboard
 - Enabled instant class status changes (Active/Cancelled/Full)
-- Added connection monitoring & automatic reconnection logic
+- Added **SMS & Email notification system** for:
+  - Payment reminders (7 days before expiration)
+  - Payment success/failure alerts
+  - Class enrollment confirmations
+  - Trainer announcements
+- Implemented connection monitoring & automatic reconnection logic
 
 ### 🏗️ Database & Cloud Architecture (Solo Development)
-- Designed **normalized PostgreSQL schema** with 10+ tables (users, profiles, classes, payments, etc.)
+- Designed **normalized PostgreSQL schema** with 12+ tables (users, profiles, classes, payments, payment_history, notifications, etc.)
 - Configured **dual-mode database connection**: Local development + Neon Cloud production
 - Implemented **SSL security** for cloud connections with environment detection
 - Created **auto-initialization database tables** on server startup
 - Built comprehensive **database health checks** with error logging
+- Implemented **payment history tracking** with timestamp and status logs
 
 ### 🖼️ Content Management (Solo Development)
 - Built **admin gallery management system** with CRUD operations
@@ -72,10 +86,12 @@ Engineered a complete **gym management system** with AI-powered assistance, enab
   - Database connectivity verification
   - Groq AI API validation
   - Mail server status confirmation
+  - SMS gateway connectivity check
   - Environment variable audit
 - Implemented **request logging middleware** for debugging
 - Created **error handling** across all routes with meaningful messages
 - Added **graceful database connection pooling** with pg library
+- Built **payment retry mechanism** for failed transactions
 
 ---
 
@@ -87,7 +103,8 @@ Engineered a complete **gym management system** with AI-powered assistance, enab
 | Authentication | JWT + bcryptjs | Secure 24-hour sessions |
 | Real-Time Updates | Socket.io | Sub-second sync across clients |
 | Database | PostgreSQL + Neon | Scalable, production-ready |
-| Email System | Nodemailer + OTP | Verified user interactions |
+| Email/SMS System | Nodemailer + SMS Gateway | Multi-channel notifications |
+| Payment Processing | Custom Payment Engine | Automated blocking & renewal |
 | Deployment | Vercel + Neon Cloud | 99%+ uptime, auto-scaling |
 
 ---
@@ -98,8 +115,10 @@ Engineered a complete **gym management system** with AI-powered assistance, enab
 Authentication:    ✅ Login/Register | ✅ OTP Verification | ✅ Password Hashing
 Member Features:   ✅ Profile Setup | ✅ Class Enrollment | ✅ AI Chat | ✅ Payment History
 Admin Features:    ✅ Member Management | ✅ Class Scheduling | ✅ Trainer Management | ✅ Revenue Analytics
+Payments:          ✅ Payment Tracking | ✅ Auto-Blocking | ✅ Renewal Dates | ✅ SMS/Email Notifications
+Payment Blocking:  ✅ Access Restriction | ✅ Grace Period | ✅ Auto-Renewal | ✅ Failure Handling
 AI Assistant:      ✅ Persistent Chat | ✅ Daily Limits | ✅ Groq Integration | ✅ History Tracking
-Real-Time:         ✅ WebSocket Sync | ✅ Live Notifications | ✅ Class Updates
+Real-Time:         ✅ WebSocket Sync | ✅ SMS/Email Alerts | ✅ Class Updates | ✅ Payment Notifications
 Security:          ✅ RBAC | ✅ JWT Tokens | ✅ Email Verification | ✅ Input Validation
 ```
 
@@ -107,12 +126,13 @@ Security:          ✅ RBAC | ✅ JWT Tokens | ✅ Email Verification | ✅ Inpu
 
 ## 🚀 Project Statistics
 
-- **Total Lines of Code:** 5,000+
+- **Total Lines of Code:** 5,500+
 - **Components Built:** 25+ React components
-- **API Endpoints:** 30+ Express routes
-- **Database Tables:** 10+ PostgreSQL tables
+- **API Endpoints:** 35+ Express routes
+- **Database Tables:** 12+ PostgreSQL tables
+- **Notification Channels:** Email + SMS
 - **Development Time:** 3+ months (solo)
-- **GitHub Commits:** 50+ documented commits
+- **GitHub Commits:** 60+ documented commits
 
 ---
 
@@ -121,9 +141,11 @@ Security:          ✅ RBAC | ✅ JWT Tokens | ✅ Email Verification | ✅ Inpu
 ✓ Full-stack TypeScript development with modern frameworks  
 ✓ AI/LLM integration patterns and API management  
 ✓ Real-time communication with WebSockets  
+✓ Multi-channel notification systems (Email, SMS)  
+✓ Payment processing & subscription management  
+✓ Automated access control & business logic  
 ✓ Cloud database deployment and security  
 ✓ Production-grade authentication & authorization  
-✓ Email service integration & OTP workflows  
 ✓ System design & scalable architecture  
 
 ---
@@ -133,4 +155,4 @@ Security:          ✅ RBAC | ✅ JWT Tokens | ✅ Email Verification | ✅ Inpu
 
 ---
 
-*Solo Full-Stack Development | Production-Ready Application | Cloud-Deployed System*
+*Solo Full-Stack Development | Production-Ready Application | Cloud-Deployed System | Payment Processing Integrated*
