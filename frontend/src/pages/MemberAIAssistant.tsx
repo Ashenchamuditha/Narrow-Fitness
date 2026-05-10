@@ -63,7 +63,7 @@ const ChatMessages = memo(({ messages, onDownloadPDF }: { messages: any[], onDow
             }}>{msg.text}</ReactMarkdown>
           </div>
 
-          {msg.role === 'model' && (msg.text.includes('|') || msg.text.toLowerCase().includes('plan')) && (
+          {msg.role === 'model' && msg.text.includes('|') && (msg.text.toLowerCase().includes('download') || msg.text.toLowerCase().includes('pdf')) && (
             <button 
               onClick={() => onDownloadPDF(msg)}
               className="flex items-center gap-2 px-4 py-2.5 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-600 hover:text-white transition-all text-[9px] font-black uppercase mt-6 shadow-sm border border-orange-100 group"
@@ -86,6 +86,41 @@ const ChatMessages = memo(({ messages, onDownloadPDF }: { messages: any[], onDow
       </motion.div>
     ))}
   </div>
+));
+
+const SessionItem = memo(({ s, currentSid, switchSession, deleteSession }: { s: any, currentSid: number | null, switchSession: (sid: number) => void, deleteSession: (e: any, sid: number) => void }) => (
+  <div className="relative group">
+    <button onClick={() => switchSession(s.id)} className={`w-full text-left p-5 rounded-2xl transition-all border ${currentSid === s.id ? 'bg-orange-50 border-orange-200 text-orange-600 shadow-md' : 'bg-slate-50 border-transparent hover:bg-slate-100'}`}>
+      <p className="text-[11px] font-black italic truncate leading-none pr-6">"{s.title}"</p>
+      <p className="text-[8px] font-bold mt-2 opacity-50 uppercase tracking-widest">{new Date(s.created_at).toLocaleDateString()}</p>
+    </button>
+    <button onClick={(e) => deleteSession(e, s.id)} className="absolute right-4 top-5 p-1.5 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-3.5 h-3.5" /></button>
+  </div>
+));
+
+const ChatSidebar = memo(({ sessions, currentSid, switchSession, deleteSession, setIsNewSessionModalOpen, isSidebarOpen }: any) => (
+  <AnimatePresence initial={false}>
+    {isSidebarOpen && (
+      <motion.div 
+        initial={{ width: 0, opacity: 0, marginRight: 0 }}
+        animate={{ width: 288, opacity: 1, marginRight: 24 }}
+        exit={{ width: 0, opacity: 0, marginRight: 0 }}
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        className="hidden lg:flex flex-col bg-white rounded-[2.5rem] border border-slate-100 shadow-xl overflow-hidden"
+      >
+        <div className="w-72 p-6 flex flex-col h-full">
+          <button onClick={() => setIsNewSessionModalOpen(true)} className="w-full py-4 bg-black text-white rounded-2xl font-black italic text-[11px] mb-6 flex items-center justify-center gap-2 hover:bg-orange-600 transition-all shadow-lg shrink-0">
+            <Plus className="w-4 h-4" /> new workout chat
+          </button>
+          <div className="flex-1 overflow-y-auto space-y-3 no-scrollbar pr-1">
+            {sessions.map((s: any) => (
+              <SessionItem key={s.id} s={s} currentSid={currentSid} switchSession={switchSession} deleteSession={deleteSession} />
+            ))}
+          </div>
+        </div>
+      </motion.div>
+    )}
+  </AnimatePresence>
 ));
 
 export default function MemberAIAssistant() {
@@ -119,19 +154,19 @@ export default function MemberAIAssistant() {
 
   // --- FUNCTIONS ---
 
-  const scrollToBottom = () => {
+  const scrollToBottom = React.useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     setShowScrollBtn(false);
-  };
+  }, []);
 
-  const handleScroll = () => {
+  const handleScroll = React.useCallback(() => {
     if (chatContainerRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
       setShowScrollBtn(scrollHeight - scrollTop - clientHeight > 300);
     }
-  };
+  }, []);
 
-  const switchSession = (sid: number) => {
+  const switchSession = React.useCallback((sid: number) => {
     setCurrentSid(sid);
     setIsDrawerOpen(false);
     fetch(`/api/member/ai/history/${sid}`)
@@ -145,18 +180,18 @@ export default function MemberAIAssistant() {
         }
         setTimeout(scrollToBottom, 100);
       });
-  };
+  }, [scrollToBottom]);
 
-  const loadSessions = async (uid: number) => {
+  const loadSessions = React.useCallback(async (uid: number) => {
     const res = await fetch(`/api/member/ai/sessions/${uid}`);
     const data = await res.json();
     setSessions(data);
     if (data.length > 0) switchSession(data[0].id);
     else setIsNewSessionModalOpen(true);
-  };
+  }, [switchSession]);
 
-  const handleCreateSession = async () => {
-    if (!newSessionTitle.trim()) return;
+  const handleCreateSession = React.useCallback(async () => {
+    if (!newSessionTitle.trim() || !user) return;
     try {
       const res = await fetch('/api/member/ai/sessions/new', {
         method: 'POST',
@@ -169,22 +204,24 @@ export default function MemberAIAssistant() {
       setIsNewSessionModalOpen(false);
       switchSession(newS.id);
     } catch (err) { console.error("Session creation failed"); }
-  };
+  }, [newSessionTitle, user, switchSession]);
 
-  const deleteSession = async (e: React.MouseEvent, sid: number) => {
+  const deleteSession = React.useCallback(async (e: React.MouseEvent, sid: number) => {
     e.stopPropagation();
     if (!(await confirmAction("are you sure you want to delete?"))) return;
     const res = await fetch(`/api/member/ai/sessions/${sid}`, { method: 'DELETE' });
     if (res.ok) {
-        const filtered = sessions.filter(s => s.id !== sid);
-        setSessions(filtered);
-        if (currentSid === sid && filtered.length > 0) switchSession(filtered[0].id);
-        else if (filtered.length === 0) window.location.reload();
+        setSessions(prev => {
+          const filtered = prev.filter(s => s.id !== sid);
+          if (currentSid === sid && filtered.length > 0) switchSession(filtered[0].id);
+          else if (filtered.length === 0) window.location.reload();
+          return filtered;
+        });
     }
-  };
+  }, [currentSid, switchSession]);
 
-  const handleSendMessage = async () => {
-    if ((!input.trim() && attachedFiles.length === 0) || isLoading || limitReached) return;
+  const handleSendMessage = React.useCallback(async () => {
+    if ((!input.trim() && attachedFiles.length === 0) || isLoading || limitReached || !user || !currentSid) return;
 
     const currentInputType = attachedFiles.length > 0 ? 'file' : activeInputType;
     const currentFileName = attachedFiles.length > 0 ? attachedFiles[0].name : null;
@@ -233,9 +270,9 @@ export default function MemberAIAssistant() {
     } catch (error) {
         console.error("AI Analysis Failed");
     } finally { setIsLoading(false); setTimeout(scrollToBottom, 150); }
-  };
+  }, [input, attachedFiles, isLoading, limitReached, user, currentSid, activeInputType, scrollToBottom]);
 
-  const handleFileUpload = async (e: any) => {
+  const handleFileUpload = React.useCallback(async (e: any) => {
     const file = e.target.files[0]; if (!file) return;
 
     if (file.name.toLowerCase().endsWith('.doc') || file.name.toLowerCase().endsWith('.docx')) {
@@ -251,9 +288,9 @@ export default function MemberAIAssistant() {
         const data = await res.json();
         if (res.ok) setAttachedFiles(prev => [...prev, { name: file.name, type: data.type, extractedText: data.text, icon: file.type.includes('pdf') ? FileText : ImageIcon }]);
     } finally { setIsProcessingMedia(false); e.target.value = ''; }
-  };
+  }, []);
 
-  const toggleVoice = async () => {
+  const toggleVoice = React.useCallback(async () => {
     if (isListening) {
       mediaRecorderRef.current?.stop();
       setIsListening(false);
@@ -307,9 +344,10 @@ export default function MemberAIAssistant() {
       toast.error("Please allow microphone access for voice input.");
       console.error(err);
     }
-  };
+  }, [isListening]);
 
-  const handleDownloadPDF = async (msg: any) => {
+  const handleDownloadPDF = React.useCallback(async (msg: any) => {
+    if (!user || !currentSid) return;
     const loadingToast = toast.loading("Generating professional PDF...");
     try {
       const currentSession = sessions.find(s => s.id === currentSid);
@@ -339,7 +377,7 @@ export default function MemberAIAssistant() {
     } catch (err) {
       toast.error("Download failed. System busy.", { id: loadingToast });
     }
-  };
+  }, [user, currentSid, sessions]);
 
   // --- SESSION MESSAGE COUNTER ---
   const [sessionCount, setSessionCount] = useState(0);
@@ -361,9 +399,9 @@ export default function MemberAIAssistant() {
     loadSessions(parsed.id);
 
     fetchLiveUsage(parsed.id);
-  }, [navigate]);
+  }, [navigate, loadSessions]);
 
-  const fetchLiveUsage = async (uid: number) => {
+  const fetchLiveUsage = React.useCallback(async (uid: number) => {
     try {
       const res = await fetch(`/api/member/ai/stats/${uid}`);
       const data = await res.json();
@@ -377,11 +415,11 @@ export default function MemberAIAssistant() {
     } catch (e) {
       console.error("Failed to fetch live usage stats", e);
     }
-  };
+  }, []);
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages.length, isLoading]);
+  }, [messages.length, isLoading, scrollToBottom]);
 
   if (!user) return null;
 
@@ -389,35 +427,14 @@ export default function MemberAIAssistant() {
     <MemberLayout fullWidth>
       <div className="flex h-[calc(100vh-7rem)] w-full gap-6 px-2 lg:px-4">
         
-        {/* --- DESKTOP SIDEBAR --- */}
-        <AnimatePresence initial={false}>
-          {isSidebarOpen && (
-            <motion.div 
-              initial={{ width: 0, opacity: 0, marginRight: 0 }}
-              animate={{ width: 288, opacity: 1, marginRight: 24 }}
-              exit={{ width: 0, opacity: 0, marginRight: 0 }}
-              transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              className="hidden lg:flex flex-col bg-white rounded-[2.5rem] border border-slate-100 shadow-xl overflow-hidden"
-            >
-               <div className="w-72 p-6 flex flex-col h-full">
-                  <button onClick={() => setIsNewSessionModalOpen(true)} className="w-full py-4 bg-black text-white rounded-2xl font-black italic text-[11px] mb-6 flex items-center justify-center gap-2 hover:bg-orange-600 transition-all shadow-lg shrink-0">
-                    <Plus className="w-4 h-4" /> new workout chat
-                  </button>
-                  <div className="flex-1 overflow-y-auto space-y-3 no-scrollbar pr-1">
-                     {sessions.map(s => (
-                       <div key={s.id} className="relative group">
-                           <button onClick={() => switchSession(s.id)} className={`w-full text-left p-5 rounded-2xl transition-all border ${currentSid === s.id ? 'bg-orange-50 border-orange-200 text-orange-600 shadow-md' : 'bg-slate-50 border-transparent hover:bg-slate-100'}`}>
-                               <p className="text-[11px] font-black italic truncate leading-none pr-6">"{s.title}"</p>
-                               <p className="text-[8px] font-bold mt-2 opacity-50 uppercase tracking-widest">{new Date(s.created_at).toLocaleDateString()}</p>
-                           </button>
-                           <button onClick={(e) => deleteSession(e, s.id)} className="absolute right-4 top-5 p-1.5 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-3.5 h-3.5" /></button>
-                       </div>
-                     ))}
-                  </div>
-               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <ChatSidebar 
+          sessions={sessions} 
+          currentSid={currentSid} 
+          switchSession={switchSession} 
+          deleteSession={deleteSession} 
+          setIsNewSessionModalOpen={setIsNewSessionModalOpen}
+          isSidebarOpen={isSidebarOpen}
+        />
 
         {/* --- MAIN CHAT UI --- */}
         <div className="flex-1 flex flex-col bg-white rounded-[2.5rem] border border-slate-100 shadow-2xl overflow-hidden relative">
@@ -457,7 +474,7 @@ export default function MemberAIAssistant() {
             <button onClick={() => setIsInfoOpen(true)} className="p-2.5 bg-slate-50 text-slate-400 rounded-xl hover:bg-orange-600 hover:text-white transition-all shadow-sm"><Info className="w-5" /></button>
           </div>
 
-          <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 lg:px-16 space-y-10 no-scrollbar bg-[#fcfcfc]">
+          <div ref={chatContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 lg:px-16 space-y-10 no-scrollbar bg-[#fcfcfc]">
             <ChatMessages messages={messages} onDownloadPDF={handleDownloadPDF} />
             {(isLoading || isProcessingMedia) && (
               <div className="flex justify-start items-center gap-3">
